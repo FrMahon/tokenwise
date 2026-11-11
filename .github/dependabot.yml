@@ -1,9 +1,10 @@
 version: 2
 updates:
+  # Version bumps for pip only raise the minimum in pyproject.toml and narrow compatibility.
+  # A limit of 0 disables those PRs; security updates still open as usual.
   - package-ecosystem: pip
     directory: /
-    schedule:
-      interval: weekly
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
