@@ -28,7 +28,7 @@ def test_file_grown_between_runs_adds_only_new_rows(tmp_path):
     con = connect(":memory:")
     ingest_dir(tmp_path, con)
     before = count(con)
-    extra = write_session(tmp_path / "other", "tmp", [step(1)]).read_text()
+    extra = write_session(tmp_path / "x" / "y", "tmp", [step(1)]).read_text()
     with p.open("a", encoding="utf-8") as f:
         f.write(extra)
     stats = ingest_dir(tmp_path, con)
