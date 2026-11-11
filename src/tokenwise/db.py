@@ -4,7 +4,7 @@ import duckdb
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS raw_events (
-    session_id VARCHAR, project VARCHAR, line_no BIGINT, type VARCHAR, ts VARCHAR,
+    session_id VARCHAR, project VARCHAR, line_no BIGINT, type VARCHAR, ts VARCHAR, message_id VARCHAR,
     model VARCHAR, input_tokens BIGINT, output_tokens BIGINT,
     cache_write_tokens BIGINT, cache_read_tokens BIGINT,
     tool_name VARCHAR, tool_use_id VARCHAR, input_hash VARCHAR,

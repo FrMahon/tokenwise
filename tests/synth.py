@@ -20,7 +20,7 @@ def write_session(dir: Path, name: str, steps: list[dict]) -> Path:
         lines.append({
             "type": "assistant", "timestamp": ts, "sessionId": name,
             "message": {
-                "role": "assistant", "model": s.get("model", "claude-sonnet-5-5"),
+                "role": "assistant", "id": f"msg_{name}_{i}", "model": s.get("model", "claude-sonnet-5-5"),
                 "usage": s.get("usage", DEFAULT_USAGE),
                 "content": [{"type": "text", "text": "SECRET-TEXT"},
                             {"type": "tool_use", "id": tid, "name": s["tool"], "input": s["input"]}],

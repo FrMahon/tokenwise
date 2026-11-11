@@ -6,7 +6,7 @@ import hashlib
 import json
 
 COLUMNS = (
-    "session_id", "project", "line_no", "type", "ts", "model",
+    "session_id", "project", "line_no", "type", "ts", "message_id", "model",
     "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens",
     "tool_name", "tool_use_id", "input_hash", "result_chars", "result_hash", "is_error",
 )
@@ -61,7 +61,7 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
     if d.get("type") == "assistant":
         usage = msg.get("usage") if isinstance(msg.get("usage"), dict) else {}
         rows.append(_row(
-            base, type="assistant", model=msg.get("model"),
+            base, type="assistant", model=msg.get("model"), message_id=msg.get("id"),
             input_tokens=_int(usage.get("input_tokens")),
             output_tokens=_int(usage.get("output_tokens")),
             cache_write_tokens=_int(usage.get("cache_creation_input_tokens")),

@@ -1,7 +1,7 @@
 from tokenwise.db import connect
 
 RAW_COLUMNS = {
-    "session_id", "project", "line_no", "type", "ts", "model",
+    "session_id", "project", "line_no", "type", "ts", "message_id", "model",
     "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens",
     "tool_name", "tool_use_id", "input_hash", "result_chars", "result_hash", "is_error",
 }
