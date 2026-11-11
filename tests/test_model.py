@@ -157,3 +157,22 @@ def test_train_cached_retrains_on_new_data_force_or_bad_file(tmp_path):
         assert len(calls) == 3
     finally:
         M.fit = real
+
+
+def test_load_refuses_hostile_function_references(tmp_path):
+    import pytest
+    import skops.io as sio
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import FunctionTransformer
+    evil = {"model": Pipeline([("f", FunctionTransformer(func=eval))]), "metrics": {}, "source": "personal"}
+    path = tmp_path / "evil.skops"
+    sio.dump(evil, path)
+    with pytest.raises(ValueError, match="unexpected types"):
+        M.load(path)
+
+
+def test_genuine_models_still_load(tmp_path):
+    res = M.train(planted())
+    M.save(res, tmp_path / "ok.skops")
+    assert M.load(tmp_path / "ok.skops").source == res.source
+    assert M.load_baseline() is not None

@@ -62,11 +62,13 @@ def _metrics(pipe: Pipeline, df: pd.DataFrame) -> dict:
             "n_eval": int(len(df))}
 
 
-ALLOWED_TYPE_PREFIXES = ("sklearn.", "numpy.", "builtins.")
+# Exactly what a genuine model needs beyond skops' built-in trusted types. Anything else (functions such as
+# builtins.eval, other packages) is refused, so a tampered file cannot smuggle in a callable.
+ALLOWED_TYPE_PREFIXES = ("sklearn.ensemble._hist_gradient_boosting.",)
 
 
 def _safe_load(path):
-    """Load a skops file, refusing any type outside scikit-learn/numpy/builtins (no pickle)."""
+    """Load a skops file, refusing any type outside the allowlist (no pickle)."""
     untrusted = sio.get_untrusted_types(file=path)
     bad = [t for t in untrusted if not t.startswith(ALLOWED_TYPE_PREFIXES)]
     if bad:

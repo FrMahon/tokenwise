@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import pandas as pd
+
 from .parser import COLUMNS, parse_line
 
 BATCH = 5000
@@ -16,13 +18,36 @@ class IngestStats:
     skipped_lines: int = 0
 
 
+INT_COLUMNS = frozenset({"line_no", "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens",
+                         "result_chars", "cache_write_5m_tokens"})
+
+
+def _text(v):
+    return v if v is None or isinstance(v, str) else str(v)
+
+
 def _flush(con, rows):
-    if rows:
-        placeholders = ",".join("?" * len(COLUMNS))
-        # placeholders only: "?" repeated; every value is bound as a parameter
-        con.executemany(f"INSERT INTO raw_events VALUES ({placeholders})",  # nosec B608
-                        [[r[c] for c in COLUMNS] for r in rows])
-        rows.clear()
+    """Insert a batch in one bulk statement (row-by-row inserts are ~1000x slower in DuckDB)."""
+    if not rows:
+        return
+    data = {}
+    for c in COLUMNS:
+        col = [r[c] for r in rows]
+        if c in INT_COLUMNS:
+            data[c] = pd.array(col, dtype="Int64")  # nullable, exact for the full 64-bit range
+        elif c == "is_error":
+            data[c] = pd.array(col, dtype="boolean")
+        else:
+            data[c] = pd.Series([_text(v) for v in col], dtype=object)
+    batch = pd.DataFrame(data)
+    cols = ", ".join(COLUMNS)
+    con.register("_batch", batch)
+    try:
+        # column names are constants from the parser, never user input; the values come from the registered frame
+        con.execute(f"INSERT INTO raw_events ({cols}) SELECT {cols} FROM _batch")  # nosec B608
+    finally:
+        con.unregister("_batch")
+    rows.clear()
 
 
 def _discard_rest(f) -> bool:

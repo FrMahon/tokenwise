@@ -95,3 +95,34 @@ def test_hostile_line_does_not_abort_ingest(tmp_path):
     con = connect(":memory:")
     stats = ingest_dir(tmp_path, con)
     assert stats.files == 2 and count(con) == 3 + 1 + 3
+
+
+def test_bulk_insert_keeps_exact_values(tmp_path):
+    import json
+    from tokenwise.db import connect
+    from tokenwise.ingest.loader import ingest_dir
+    root = tmp_path / "s"
+    root.mkdir()
+    big = 2 ** 62 + 1  # float64 would round this
+    line = json.dumps({"type": "assistant", "timestamp": "t", "message": {
+        "role": "assistant", "id": "m1", "model": "x",
+        "usage": {"input_tokens": big, "output_tokens": 0}, "content": [
+            {"type": "tool_use", "id": "u1", "name": "Bash", "input": {"command": "ls"}}]}})
+    (root / "a.jsonl").write_text(line + "\n", encoding="utf-8")
+    con = connect(tmp_path / "t.duckdb")
+    ingest_dir(root, con)
+    assert con.execute("SELECT input_tokens FROM raw_events WHERE type = 'assistant'").fetchone()[0] == big
+    assert con.execute("SELECT cache_read_tokens, is_error FROM raw_events WHERE type = 'assistant'").fetchone() == (None, None)
+
+
+def test_ingestion_is_not_row_by_row(tmp_path):
+    import time
+    from synth import write_session
+    from tokenwise.db import connect
+    from tokenwise.ingest.loader import ingest_dir
+    write_session(tmp_path / "s" / "p", "a", [{"tool": "Read", "input": {"file_path": f"/f{i % 9}"}, "result": "x"}
+                                              for i in range(2500)])
+    con = connect(tmp_path / "t.duckdb")
+    t = time.time()
+    ingest_dir(tmp_path / "s", con)
+    assert time.time() - t < 8  # row-by-row inserts took about 17 s here
