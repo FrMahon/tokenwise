@@ -56,5 +56,5 @@ def render(con, result: TrainResult, probs, *, skipped_lines: int = 0) -> str:
         lines.append("Warning: no price for " + ", ".join(sorted(unpriced))
                      + " - their cost is excluded (edit pricing.toml).")
     if skipped_lines:
-        lines.append(f"Note: {skipped_lines} lines were skipped (unrecognized or incomplete).")
+        lines.append(f"Note: {skipped_lines} lines were skipped (metadata or unrecognized format).")
     return "\n".join(lines)
