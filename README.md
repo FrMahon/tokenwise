@@ -42,6 +42,10 @@ Commands: `ingest`, `train`, `report`.
 
 Nothing leaves your machine. Conversation text is never stored: only token counts, result sizes and SHA-1 hashes of inputs and results.
 
+## Security
+
+See [SECURITY.md](SECURITY.md). The bundled model is stored in a safe format (not pickle) and is checked against a type allowlist before loading.
+
 ## Limitations
 
 - "Avoidable" has no ground truth. The model predicts *patterns* of waste defined above, not verdicts.

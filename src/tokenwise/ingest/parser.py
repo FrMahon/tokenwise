@@ -13,7 +13,8 @@ COLUMNS = (
 
 
 def _sha1(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()
+    # Content fingerprint only (never used for security), hence usedforsecurity=False.
+    return hashlib.sha1(text.encode("utf-8", errors="replace"), usedforsecurity=False).hexdigest()
 
 
 def _input_hash(inp) -> str:
@@ -22,7 +23,10 @@ def _input_hash(inp) -> str:
         for key in ("file_path", "path", "notebook_path"):
             if isinstance(inp.get(key), str):
                 return _sha1(inp[key])
-    return _sha1(json.dumps(inp, sort_keys=True, default=str))
+    try:
+        return _sha1(json.dumps(inp, sort_keys=True, default=str))
+    except (ValueError, TypeError, RecursionError):
+        return _sha1("<unhashable input>")
 
 
 def _result_text(content) -> str:
@@ -33,8 +37,12 @@ def _result_text(content) -> str:
     return ""
 
 
+INT64_MIN, INT64_MAX = -(2 ** 63), 2 ** 63 - 1
+
+
 def _int(v):
-    return v if isinstance(v, int) and not isinstance(v, bool) else None
+    ok = isinstance(v, int) and not isinstance(v, bool) and INT64_MIN <= v <= INT64_MAX
+    return v if ok else None
 
 
 def _row(base: dict, **fields) -> dict:
@@ -47,7 +55,7 @@ def _row(base: dict, **fields) -> dict:
 def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[dict]:
     try:
         d = json.loads(line)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):  # malformed, or nested deeper than Python allows
         return []
     if not isinstance(d, dict):
         return []

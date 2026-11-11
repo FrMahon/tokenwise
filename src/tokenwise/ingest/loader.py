@@ -18,7 +18,8 @@ class IngestStats:
 def _flush(con, rows):
     if rows:
         placeholders = ",".join("?" * len(COLUMNS))
-        con.executemany(f"INSERT INTO raw_events VALUES ({placeholders})",
+        # placeholders only: "?" repeated; every value is bound as a parameter
+        con.executemany(f"INSERT INTO raw_events VALUES ({placeholders})",  # nosec B608
                         [[r[c] for c in COLUMNS] for r in rows])
         rows.clear()
 

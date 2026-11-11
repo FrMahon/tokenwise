@@ -83,3 +83,15 @@ def test_subagent_transcripts_are_ingested(tmp_path):
     stats = ingest_dir(tmp_path, con)
     assert stats.files == 1 and count(con) == 3
     assert con.execute("SELECT DISTINCT project FROM raw_events").fetchall() == [("proj",)]
+
+
+def test_hostile_line_does_not_abort_ingest(tmp_path):
+    p = write_session(tmp_path / "proj", "s1", [step(0)])
+    hostile = "[" * 100_000 + "]" * 100_000
+    huge = json.dumps({"type": "assistant", "message": {"id": "m", "usage": {"input_tokens": 10 ** 30}}})
+    with p.open("a", encoding="utf-8") as f:
+        f.write(hostile + chr(10) + huge + chr(10))
+    write_session(tmp_path / "proj", "s2", [step(1)])
+    con = connect(":memory:")
+    stats = ingest_dir(tmp_path, con)
+    assert stats.files == 2 and count(con) == 3 + 1 + 3

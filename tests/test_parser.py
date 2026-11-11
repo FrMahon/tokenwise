@@ -74,3 +74,18 @@ def test_unknown_type_returns_empty():
 def test_missing_usage_gives_null_tokens():
     r = parse(asst(None))[0]
     assert r["input_tokens"] is None and r["cache_read_tokens"] is None
+
+
+def test_deeply_nested_json_returns_empty():
+    assert parse("[" * 100_000 + "]" * 100_000) == []
+
+
+def test_deeply_nested_tool_input_does_not_crash():
+    line = ('{"type":"assistant","message":{"content":[{"type":"tool_use","id":"x","name":"B","input":'
+            + "[" * 5000 + "]" * 5000 + "}]}}")
+    assert isinstance(parse(line), list)
+
+
+def test_out_of_range_integers_become_null():
+    r = parse(asst({"input_tokens": 99999999999999999999999, "output_tokens": 5}))[0]
+    assert r["input_tokens"] is None and r["output_tokens"] == 5

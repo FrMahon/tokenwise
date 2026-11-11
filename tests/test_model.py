@@ -84,7 +84,7 @@ def test_bundled_baseline_loads_and_predicts():
 def test_unreadable_baseline_returns_none(monkeypatch):
     def boom(*a, **k):
         raise ModuleNotFoundError("numpy._core")
-    monkeypatch.setattr(M.joblib, "load", boom)
+    monkeypatch.setattr(M, "_safe_load", boom)
     assert M.load_baseline() is None
 
 
@@ -100,3 +100,27 @@ def test_nonstandard_tools_are_bucketed_as_other(tmp_path):
     df = build_features(con).sort_values("step_idx")
     assert df["tool_name"].tolist() == ["other", "Read"]
     assert df["prev_tool_name"].tolist() == ["none", "other"]
+
+
+def test_models_are_never_loaded_with_pickle():
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parent.parent / "src" / "tokenwise"
+    for f in src.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        assert "import pickle" not in text and "joblib.load" not in text, f
+
+
+def test_load_refuses_unexpected_types(tmp_path):
+    import skops.io as sio
+
+    class Sneaky:
+        pass
+
+    path = tmp_path / "evil.skops"
+    sio.dump({"model": Sneaky(), "metrics": {}, "source": "personal"}, path)
+    try:
+        M.load(path)
+    except ValueError as e:
+        assert "refusing" in str(e)
+    else:
+        raise AssertionError("an unexpected type was loaded")

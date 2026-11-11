@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-import joblib
 import numpy as np
+import skops.io as sio
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -59,13 +59,25 @@ def _metrics(pipe: Pipeline, df: pd.DataFrame) -> dict:
             "n_eval": int(len(df))}
 
 
+ALLOWED_TYPE_PREFIXES = ("sklearn.", "numpy.", "builtins.")
+
+
+def _safe_load(path):
+    """Load a skops file, refusing any type outside scikit-learn/numpy/builtins (no pickle)."""
+    untrusted = sio.get_untrusted_types(file=path)
+    bad = [t for t in untrusted if not t.startswith(ALLOWED_TYPE_PREFIXES)]
+    if bad:
+        raise ValueError(f"refusing to load model file with unexpected types: {bad}")
+    return sio.load(path, trusted=untrusted)
+
+
 def load_baseline() -> Pipeline | None:
-    path = resources.files("tokenwise").joinpath("baseline.joblib")
+    path = resources.files("tokenwise").joinpath("baseline.skops")
     if not path.is_file():
         return None
     try:
         with resources.as_file(path) as p:
-            return joblib.load(p)
+            return _safe_load(p)
     except Exception:  # incompatible numpy/scikit-learn build: fall back instead of crashing
         return None
 
@@ -88,9 +100,9 @@ def predict_proba(result: TrainResult, df: pd.DataFrame) -> np.ndarray:
 
 
 def save(result: TrainResult, path: Path) -> None:
-    joblib.dump({"model": result.model, "metrics": result.metrics, "source": result.source}, path)
+    sio.dump({"model": result.model, "metrics": result.metrics, "source": result.source}, path)
 
 
 def load(path: Path) -> TrainResult:
-    d = joblib.load(path)
+    d = _safe_load(path)
     return TrainResult(d["model"], d["metrics"], d["source"])
