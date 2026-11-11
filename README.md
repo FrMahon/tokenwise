@@ -54,3 +54,7 @@ Nothing leaves your machine. Conversation text is never stored: only token count
 pip install -e ".[dev]" && pytest
 ```
 Tests use synthetic sessions only.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
