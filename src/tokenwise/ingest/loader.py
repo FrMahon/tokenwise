@@ -1,0 +1,52 @@
+"""Incremental, streaming ingestion of session .jsonl files into raw_events."""
+from dataclasses import dataclass
+from pathlib import Path
+
+from .parser import COLUMNS, parse_line
+
+BATCH = 5000
+
+
+@dataclass
+class IngestStats:
+    files: int = 0
+    new_rows: int = 0
+    skipped_lines: int = 0
+
+
+def _flush(con, rows):
+    if rows:
+        placeholders = ",".join("?" * len(COLUMNS))
+        con.executemany(f"INSERT INTO raw_events VALUES ({placeholders})",
+                        [[r[c] for c in COLUMNS] for r in rows])
+        rows.clear()
+
+
+def ingest_dir(sessions_dir: Path, con) -> IngestStats:
+    stats = IngestStats()
+    for path in sorted(Path(sessions_dir).glob("*/*.jsonl")):
+        key = str(path)
+        size = path.stat().st_size
+        seen = con.execute("SELECT size, lines_read FROM ingest_files WHERE path = ?", [key]).fetchone()
+        if seen and seen[0] == size:
+            continue
+        start = seen[1] if seen else 0
+        stats.files += 1
+        rows: list[dict] = []
+        line_no = 0
+        with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
+            for line_no, line in enumerate(f, start=1):
+                if line_no <= start:
+                    continue
+                parsed = parse_line(line, path.stem, path.parent.name, line_no)
+                if parsed:
+                    rows.extend(parsed)
+                    stats.new_rows += len(parsed)
+                else:
+                    stats.skipped_lines += 1
+                if len(rows) >= BATCH:
+                    _flush(con, rows)
+        _flush(con, rows)
+        con.execute("DELETE FROM ingest_files WHERE path = ?", [key])
+        con.execute("INSERT INTO ingest_files VALUES (?, ?, ?)", [key, size, max(line_no, start)])
+    return stats
