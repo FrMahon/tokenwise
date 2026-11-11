@@ -58,3 +58,19 @@ def test_dated_model_id_matches_by_prefix():
     assert price_for(prices, "claude-sonnet-5-5-20260101") == prices["claude-sonnet-5-5"]
     assert price_for(prices, "claude-sonnet-5-5") == prices["claude-sonnet-5-5"]
     assert price_for(prices, "totally-unknown") is None
+
+
+def test_bundled_prices_have_a_date():
+    from datetime import date
+    from tokenwise.pricing import bundled_prices_date
+    assert isinstance(bundled_prices_date(), date)
+
+
+def test_stale_note_only_when_old():
+    from datetime import date
+    from tokenwise.pricing import stale_note
+    as_of = date(2026, 1, 1)
+    assert stale_note(as_of, today=date(2026, 3, 1)) is None
+    assert stale_note(as_of, today=date(2026, 4, 1)) is None          # exactly 90 days
+    note = stale_note(as_of, today=date(2026, 4, 2))
+    assert note and "2026-01-01" in note and "--pricing" in note

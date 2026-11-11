@@ -2,7 +2,8 @@
 from collections import defaultdict
 
 from .model import THRESHOLD, TrainResult
-from .pricing import CHARS_PER_TOKEN, default_user_pricing_path, load_effective_prices, price_for, step_cost, turn_cost
+from .pricing import (CHARS_PER_TOKEN, bundled_prices_date, default_user_pricing_path, load_effective_prices,
+                      price_for, stale_note, step_cost, turn_cost)
 
 
 def _money(x: float) -> str:
@@ -55,6 +56,9 @@ def render(con, result: TrainResult, probs, *, skipped_lines: int = 0, prices=No
     if unpriced:
         lines.append("Warning: no price for " + ", ".join(sorted(unpriced))
                      + " - their cost is excluded (add them with --pricing FILE or in " + str(default_user_pricing_path()) + ").")
+    note = stale_note(bundled_prices_date())
+    if note:
+        lines.append(note)
     if skipped_lines:
         lines.append(f"Note: {skipped_lines} lines were skipped (metadata or unrecognized format).")
     return "\n".join(lines)

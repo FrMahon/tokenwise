@@ -124,3 +124,36 @@ def test_load_refuses_unexpected_types(tmp_path):
         assert "refusing" in str(e)
     else:
         raise AssertionError("an unexpected type was loaded")
+
+
+def test_fingerprint_tracks_data():
+    df = planted()
+    assert M.fingerprint(df) == M.fingerprint(df.copy())
+    assert M.fingerprint(df) != M.fingerprint(df.iloc[:-1])
+
+
+def test_train_cached_reuses_saved_model(tmp_path, monkeypatch):
+    df, path = planted(), tmp_path / "model.skops"
+    first = M.train_cached(df, path)
+    assert path.is_file()
+    monkeypatch.setattr(M, "fit", lambda d: (_ for _ in ()).throw(AssertionError("retrained")))
+    again = M.train_cached(df, path)
+    assert again.source == first.source and again.metrics == first.metrics
+
+
+def test_train_cached_retrains_on_new_data_force_or_bad_file(tmp_path):
+    df, path = planted(), tmp_path / "model.skops"
+    M.train_cached(df, path)
+    calls = []
+    real = M.fit
+    M.fit = lambda d: (calls.append(1), real(d))[1]
+    try:
+        M.train_cached(df.iloc[:-5], path)
+        assert len(calls) == 1
+        M.train_cached(df.iloc[:-5], path, force=True)
+        assert len(calls) == 2
+        path.write_bytes(b"not a model")
+        M.train_cached(df.iloc[:-5], path)
+        assert len(calls) == 3
+    finally:
+        M.fit = real

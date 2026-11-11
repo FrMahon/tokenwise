@@ -63,3 +63,20 @@ def test_pricing_flag_removes_unknown_model_warning(tmp_path, capsys):
     cfg.write_text('[models."mystery-model"]\ninput = 1.0\noutput = 1.0\ncache_write = 1.0\ncache_read = 0.1\n')
     code, out, _ = run(tmp_path, capsys, "--pricing", str(cfg))
     assert code == 0 and "no price" not in out
+
+
+def test_report_saves_model_and_reuses_it(tmp_path, capsys, monkeypatch):
+    make_sessions(tmp_path / "sess")
+    run(tmp_path, capsys)
+    assert (tmp_path / "model.skops").is_file()
+    monkeypatch.setattr(M, "fit", lambda d: (_ for _ in ()).throw(AssertionError("retrained")))
+    code, out, _ = run(tmp_path, capsys)
+    assert code == 0 and "Model:" in out
+
+
+def test_report_warns_when_prices_are_old(tmp_path, capsys, monkeypatch):
+    from datetime import date
+    monkeypatch.setattr("tokenwise.report.bundled_prices_date", lambda: date(2020, 1, 1))
+    make_sessions(tmp_path / "sess")
+    code, out, _ = run(tmp_path, capsys)
+    assert code == 0 and "2020-01-01" in out

@@ -26,7 +26,7 @@ tokenwise report
 ```
 
 By default it reads `~/.claude/projects`; use `--sessions-dir` and `--db` to change locations.
-Commands: `ingest`, `train`, `report`.
+Commands: `ingest`, `train`, `report`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
 
 ## How it works
 
@@ -50,7 +50,7 @@ See [SECURITY.md](SECURITY.md). The bundled model is stored in a safe format (no
 
 - "Avoidable" has no ground truth. The model predicts *patterns* of waste defined above, not verdicts.
 - Claude Code's session format is not a public API and may change; unreadable lines are counted and skipped.
-- `pricing.toml` holds estimates. Override them with `--pricing FILE` or a `pricing.toml` in your user config folder (merged over the bundled prices; dated model ids match by prefix). Models without a price are listed and excluded.
+- `pricing.toml` holds estimates. Override them with `--pricing FILE` or a `pricing.toml` in your user config folder (merged over the bundled prices; dated model ids match by prefix). Models without a price are listed and excluded. The report warns when the bundled prices were last checked more than 90 days ago.
 
 ## Development
 

@@ -24,6 +24,8 @@ def _parser() -> argparse.ArgumentParser:
         p.add_argument("--sessions-dir", type=Path, default=default_sessions_dir())
         p.add_argument("--db", type=Path, default=default_db_path())
         p.add_argument("--pricing", type=Path, default=None, help="extra pricing.toml (USD per million tokens)")
+        if name != "ingest":
+            p.add_argument("--retrain", action="store_true", help="ignore the saved model and train again")
     return ap
 
 
@@ -54,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         print("No tool calls found in these sessions; nothing to analyze.", file=sys.stderr)
         return 1
     try:
-        result = M.train(df)
+        result = M.train_cached(df, args.db.with_name("model.skops"), force=args.retrain)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1

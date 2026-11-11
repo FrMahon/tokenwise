@@ -1,9 +1,11 @@
 """Waste-prediction model with a bundled baseline for users with little data."""
+import hashlib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
 import numpy as np
+import sklearn
 import skops.io as sio
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -23,6 +25,7 @@ class TrainResult:
     model: Pipeline
     metrics: dict
     source: str  # "personal" | "baseline"
+    fingerprint: str | None = None  # identifies the data/library state a saved model was built from
 
 
 def fit(df: pd.DataFrame) -> Pipeline:
@@ -100,9 +103,39 @@ def predict_proba(result: TrainResult, df: pd.DataFrame) -> np.ndarray:
 
 
 def save(result: TrainResult, path: Path) -> None:
-    sio.dump({"model": result.model, "metrics": result.metrics, "source": result.source}, path)
+    sio.dump({"model": result.model, "metrics": result.metrics, "source": result.source,
+              "fingerprint": result.fingerprint}, path)
 
 
 def load(path: Path) -> TrainResult:
     d = _safe_load(path)
-    return TrainResult(d["model"], d["metrics"], d["source"])
+    return TrainResult(d["model"], d["metrics"], d["source"], d.get("fingerprint"))
+
+
+def fingerprint(df: pd.DataFrame) -> str:
+    """Changes whenever the data, the labels, the feature set or scikit-learn change."""
+    parts = [len(df), df["session_id"].nunique(), df["ts"].max(), int(df[TARGET].sum()),
+             sklearn.__version__, ",".join(FEATURES), "v1"]
+    return hashlib.sha256("|".join(map(str, parts)).encode()).hexdigest()
+
+
+def train_cached(df: pd.DataFrame, path: Path, *, force: bool = False) -> TrainResult:
+    """Reuse the model saved at `path` while the data is unchanged; otherwise train and save."""
+    fp = fingerprint(df)
+    if not force and path.is_file():
+        try:
+            cached = load(path)
+        except Exception:  # corrupt, foreign or incompatible file: just retrain
+            cached = None
+        if cached is not None and cached.fingerprint == fp:
+            return cached
+    result = train(df)
+    result.fingerprint = fp
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        save(result, tmp)
+        tmp.replace(path)
+    except OSError:
+        pass  # a read-only data folder must not break the report
+    return result

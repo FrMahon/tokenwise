@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 from importlib import resources
 from pathlib import Path
 
@@ -9,6 +10,7 @@ try:
 except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib
 
+STALE_AFTER_DAYS = 90
 CHARS_PER_TOKEN = 4  # rough estimate used to turn result sizes into tokens
 
 
@@ -27,6 +29,20 @@ def load_prices(path: Path | None = None) -> dict[str, ModelPrice]:
         text = Path(path).read_text(encoding="utf-8")
     models = tomllib.loads(text).get("models", {})
     return {name: ModelPrice(**vals) for name, vals in models.items()}
+
+
+def bundled_prices_date() -> date:
+    text = resources.files("tokenwise").joinpath("pricing.toml").read_text(encoding="utf-8")
+    return tomllib.loads(text)["as_of"]
+
+
+def stale_note(as_of: date, today: date | None = None) -> str | None:
+    """A one-line warning when the bundled prices were last checked a long time ago."""
+    age = ((today or date.today()) - as_of).days
+    if age <= STALE_AFTER_DAYS:
+        return None
+    return (f"Note: bundled prices were last checked on {as_of.isoformat()} ({age} days ago) and may be out of date; "
+            f"check the official pricing page and override with --pricing FILE or {default_user_pricing_path()}.")
 
 
 def turn_cost(price: ModelPrice | None, turn: dict) -> float | None:

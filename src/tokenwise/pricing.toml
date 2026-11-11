@@ -4,6 +4,8 @@
 # reported as "no price".
 # Haiku 5.5 uses the rate for prompts up to 100K tokens (longer prompts cost more).
 
+as_of = 2026-11-11
+
 [models."claude-opus-5-5"]
 input = 4.0
 output = 20.0
