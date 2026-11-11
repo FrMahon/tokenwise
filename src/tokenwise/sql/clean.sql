@@ -31,6 +31,10 @@ SELECT session_id, project, first_line AS line_no, ts, model,
 FROM ranked
 WHERE rn = 1;
 
+-- compactions: lines where the conversation was compacted (the context restarts there).
+CREATE OR REPLACE TABLE compactions AS
+SELECT DISTINCT session_id, line_no FROM raw_events WHERE type = 'compact';
+
 -- steps: one row per tool_use joined to its tool_result (orphan results are dropped).
 CREATE OR REPLACE TABLE steps AS
 WITH uses AS (
@@ -53,6 +57,9 @@ results AS (
 SELECT u.session_id, u.step_idx, u.project, u.ts, u.line_no, u.tool_name, u.input_hash,
        r.result_chars, r.result_hash, u.model,
        (SELECT count(*) FROM turns t
-         WHERE t.session_id = u.session_id AND t.line_no > u.line_no) AS turns_remaining
+         WHERE t.session_id = u.session_id AND t.line_no > u.line_no
+           AND t.line_no < coalesce((SELECT min(c.line_no) FROM compactions c
+                                      WHERE c.session_id = u.session_id AND c.line_no > u.line_no),
+                                    9223372036854775807)) AS turns_remaining
 FROM uses u
 LEFT JOIN results r ON r.session_id = u.session_id AND r.tool_use_id = u.tool_use_id;

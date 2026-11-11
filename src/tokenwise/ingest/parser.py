@@ -60,10 +60,13 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
         return []
     if not isinstance(d, dict):
         return []
+    base = {"session_id": session_id, "project": project, "line_no": line_no, "ts": d.get("timestamp")}
+    # Compaction: the context restarts from a summary, so earlier tool results are not re-read after it.
+    if (d.get("type") == "system" and d.get("subtype") == "compact_boundary") or d.get("isCompactSummary") is True:
+        return [_row(base, type="compact")]
     msg = d.get("message")
     if not isinstance(msg, dict):
         return []
-    base = {"session_id": session_id, "project": project, "line_no": line_no, "ts": d.get("timestamp")}
     content = msg.get("content") if isinstance(msg.get("content"), list) else []
     rows: list[dict] = []
 

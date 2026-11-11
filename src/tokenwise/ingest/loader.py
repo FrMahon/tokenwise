@@ -5,6 +5,7 @@ from pathlib import Path
 from .parser import COLUMNS, parse_line
 
 BATCH = 5000
+MAX_LINE = 32 * 1024 * 1024  # characters; a longer line is skipped instead of being held in memory
 NEWLINE = chr(10)
 
 
@@ -22,6 +23,16 @@ def _flush(con, rows):
         con.executemany(f"INSERT INTO raw_events VALUES ({placeholders})",  # nosec B608
                         [[r[c] for c in COLUMNS] for r in rows])
         rows.clear()
+
+
+def _discard_rest(f) -> bool:
+    """Drop the rest of an oversized line in bounded chunks. False if the file ended before its newline."""
+    while True:
+        chunk = f.readline(MAX_LINE)
+        if not chunk:
+            return False
+        if chunk.endswith(NEWLINE):
+            return True
 
 
 def _identity(root: Path, path: Path) -> tuple[str, str]:
@@ -47,9 +58,20 @@ def ingest_dir(sessions_dir: Path, con) -> IngestStats:
         rows: list[dict] = []
         complete = start
         with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
-            for line_no, line in enumerate(f, start=1):
+            line_no = 0
+            while True:
+                line = f.readline(MAX_LINE)
+                if not line:
+                    break
                 if not line.endswith(NEWLINE):
-                    break  # half-written last line: leave it for the next run
+                    if len(line) < MAX_LINE or not _discard_rest(f):
+                        break  # half-written last line: leave it for the next run
+                    line_no += 1  # oversized line, now fully skipped
+                    complete = line_no
+                    if line_no > start:
+                        stats.skipped_lines += 1
+                    continue
+                line_no += 1
                 complete = line_no
                 if line_no <= start:
                     continue
