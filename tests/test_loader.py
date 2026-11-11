@@ -126,3 +126,13 @@ def test_ingestion_is_not_row_by_row(tmp_path):
     t = time.time()
     ingest_dir(tmp_path / "s", con)
     assert time.time() - t < 8  # row-by-row inserts took about 17 s here
+
+
+def test_ingest_works_with_a_half_read_result_pending(tmp_path):
+    from synth import write_session
+    from tokenwise.db import connect
+    from tokenwise.ingest.loader import ingest_dir
+    write_session(tmp_path / "s" / "p", "a", [{"tool": "Read", "input": {"file_path": "/f"}, "result": "x"}])
+    con = connect(tmp_path / "t.duckdb")
+    con.execute("SELECT * FROM range(10)").fetchone()  # leaves an unfinished result, as a caller might
+    assert ingest_dir(tmp_path / "s", con).new_rows > 0

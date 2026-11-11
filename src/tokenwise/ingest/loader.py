@@ -41,12 +41,13 @@ def _flush(con, rows):
             data[c] = pd.Series([_text(v) for v in col], dtype=object)
     batch = pd.DataFrame(data)
     cols = ", ".join(COLUMNS)
-    con.register("_batch", batch)
+    cur = con.cursor()  # own cursor: unaffected by any half-read result on the caller's connection
     try:
+        cur.register("_batch", batch)
         # column names are constants from the parser, never user input; the values come from the registered frame
-        con.execute(f"INSERT INTO raw_events ({cols}) SELECT {cols} FROM _batch")  # nosec B608
+        cur.execute(f"INSERT INTO raw_events ({cols}) SELECT {cols} FROM _batch")  # nosec B608
     finally:
-        con.unregister("_batch")
+        cur.close()
     rows.clear()
 
 
@@ -74,7 +75,8 @@ def ingest_dir(sessions_dir: Path, con) -> IngestStats:
     for path in sorted(root.rglob("*.jsonl")):
         key = str(path.resolve())
         size = path.stat().st_size
-        seen = con.execute("SELECT size, lines_read FROM ingest_files WHERE path = ?", [key]).fetchone()
+        found = con.execute("SELECT size, lines_read FROM ingest_files WHERE path = ?", [key]).fetchall()
+        seen = found[0] if found else None  # fetchall: leave no half-read result on the connection
         if seen and seen[0] == size:
             continue
         start = seen[1] if seen else 0
