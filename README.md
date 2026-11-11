@@ -2,20 +2,20 @@
 
 See where your Claude Code token spend goes, and how much of it you could save. Runs entirely on your machine.
 
-Example output (illustrative numbers):
+Real output on 40 synthetic sessions (generated with `scripts/make_demo_sessions.py`, so the numbers say nothing about typical usage):
 
 ```
 $ tokenwise report
-Sessions analyzed: 12
-Estimated spend: $48.20
-Avoidable: $6.10 (13%)
+Sessions analyzed: 40
+Estimated spend: $202.24
+Avoidable: $42.20 (21%)
 
 Top leaks
-  1. bulky_unused     $3.90
-  2. repeat           $1.80
-  3. other patterns   $0.40
+  1. bulky_unused     $29.98
+  2. repeat           $8.27
+  3. other patterns   $3.96
 
-Model: personal (AUC 0.91)
+Model: personal (AUC 0.78)
 ```
 
 ## Install
