@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=9.2.0"]
 
 [project.scripts]
 tokenwise = "tokenwise.cli:main"
