@@ -1,0 +1,12 @@
+{
+  "name": "tokenwise",
+  "description": "tokenwise: a local report of where Claude Code token spend goes.",
+  "owner": { "name": "FrMahon", "url": "https://github.com/FrMahon" },
+  "plugins": [
+    {
+      "name": "tokenwise",
+      "source": ".",
+      "description": "Run the tokenwise report on your local sessions and explain the result."
+    }
+  ]
+}

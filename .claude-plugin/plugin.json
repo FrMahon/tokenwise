@@ -1,0 +1,9 @@
+{
+  "name": "tokenwise",
+  "description": "See where your Claude Code token spend goes and how much of it is avoidable, using the local tokenwise CLI.",
+  "author": { "name": "FrMahon", "url": "https://github.com/FrMahon" },
+  "homepage": "https://github.com/FrMahon/tokenwise",
+  "repository": "https://github.com/FrMahon/tokenwise",
+  "license": "MIT",
+  "keywords": ["tokens", "cost", "usage", "analytics"]
+}

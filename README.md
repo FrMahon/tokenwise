@@ -28,6 +28,19 @@ tokenwise report
 By default it reads `~/.claude/projects`; use `--sessions-dir` and `--db` to change locations.
 Commands: `ingest`, `train`, `report`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
 
+## Use it from Claude Code
+
+The repo is also a Claude Code plugin with one skill, so you can ask "where is my token spend going?" inside a session.
+
+```
+/plugin marketplace add FrMahon/tokenwise
+/plugin install tokenwise@tokenwise
+```
+
+On Claude Code 2.1.275 or later, one step is enough: `/plugin install tokenwise --marketplace FrMahon/tokenwise`.
+
+The skill only runs the `tokenwise` command; it does not install it. If the command is missing, it shows you the install line above and waits for you. Because Claude runs the report, its summary (spend, avoidable share, top leaks; no conversation text) appears in your session.
+
 ## How it works
 
 ![pipeline](docs/pipeline.svg)
