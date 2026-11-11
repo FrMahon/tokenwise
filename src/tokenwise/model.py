@@ -63,8 +63,11 @@ def load_baseline() -> Pipeline | None:
     path = resources.files("tokenwise").joinpath("baseline.joblib")
     if not path.is_file():
         return None
-    with resources.as_file(path) as p:
-        return joblib.load(p)
+    try:
+        with resources.as_file(path) as p:
+            return joblib.load(p)
+    except Exception:  # incompatible numpy/scikit-learn build: fall back instead of crashing
+        return None
 
 
 def train(df: pd.DataFrame, *, min_steps: int = 2000) -> TrainResult:

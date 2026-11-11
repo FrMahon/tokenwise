@@ -1,6 +1,7 @@
 import pytest
 
-from tokenwise.pricing import CHARS_PER_TOKEN, ModelPrice, load_prices, step_cost, turn_cost
+from tokenwise.pricing import (CHARS_PER_TOKEN, ModelPrice, load_effective_prices, load_prices,
+                               price_for, step_cost, turn_cost)
 
 P = ModelPrice(input=3.0, output=15.0, cache_write=6.0, cache_read=0.3)
 
@@ -37,3 +38,23 @@ def test_user_override_path(tmp_path):
     f.write_text('[models."my-model"]\ninput = 1.0\noutput = 2.0\ncache_write = 3.0\ncache_read = 0.1\n')
     prices = load_prices(f)
     assert prices == {"my-model": ModelPrice(1.0, 2.0, 3.0, 0.1)}
+
+
+def test_effective_prices_merge_explicit_over_bundled(tmp_path):
+    f = tmp_path / "p.toml"
+    f.write_text('[models."my-model"]\ninput = 1.0\noutput = 2.0\ncache_write = 3.0\ncache_read = 0.1\n')
+    prices = load_effective_prices(f, user_config=tmp_path / "missing.toml")
+    assert prices["my-model"].input == 1.0 and "claude-sonnet-5-5" in prices
+
+
+def test_user_config_is_read_when_present(tmp_path):
+    cfg = tmp_path / "pricing.toml"
+    cfg.write_text('[models."claude-sonnet-5-5"]\ninput = 9.0\noutput = 9.0\ncache_write = 9.0\ncache_read = 9.0\n')
+    assert load_effective_prices(None, user_config=cfg)["claude-sonnet-5-5"].input == 9.0
+
+
+def test_dated_model_id_matches_by_prefix():
+    prices = load_prices()
+    assert price_for(prices, "claude-sonnet-5-5-20260101") == prices["claude-sonnet-5-5"]
+    assert price_for(prices, "claude-sonnet-5-5") == prices["claude-sonnet-5-5"]
+    assert price_for(prices, "totally-unknown") is None

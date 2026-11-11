@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from synth import write_session
@@ -11,6 +13,7 @@ def fixed_baseline(monkeypatch):
     # hermetic: do not depend on the bundled baseline's learned behavior
     pipe = M.fit(planted())
     monkeypatch.setattr(M, "load_baseline", lambda: pipe)
+    monkeypatch.setattr("tokenwise.pricing.default_user_pricing_path", lambda: Path("/nonexistent/pricing.toml"))
 
 
 def make_sessions(root, model="claude-sonnet-5-5", n=6):
@@ -52,3 +55,11 @@ def test_unknown_model_warning_shown(tmp_path, capsys):
     make_sessions(tmp_path / "sess", model="mystery-model")
     code, out, _ = run(tmp_path, capsys)
     assert code == 0 and "no price" in out and "mystery-model" in out
+
+
+def test_pricing_flag_removes_unknown_model_warning(tmp_path, capsys):
+    make_sessions(tmp_path / "sess", model="mystery-model")
+    cfg = tmp_path / "prices.toml"
+    cfg.write_text('[models."mystery-model"]\ninput = 1.0\noutput = 1.0\ncache_write = 1.0\ncache_read = 0.1\n')
+    code, out, _ = run(tmp_path, capsys, "--pricing", str(cfg))
+    assert code == 0 and "no price" not in out

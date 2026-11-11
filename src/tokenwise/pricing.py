@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from platformdirs import user_config_dir
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10
@@ -40,3 +42,28 @@ def step_cost(price: ModelPrice | None, result_tokens: float, turns_remaining: i
     if price is None:
         return None
     return (result_tokens * price.cache_write + result_tokens * turns_remaining * price.cache_read) / 1e6
+
+
+def default_user_pricing_path() -> Path:
+    return Path(user_config_dir("tokenwise")) / "pricing.toml"
+
+
+def load_effective_prices(explicit: Path | None = None, user_config: Path | None = None) -> dict[str, ModelPrice]:
+    """Bundled prices, overridden by the user config file, overridden by an explicit file."""
+    prices = load_prices()
+    cfg = user_config if user_config is not None else default_user_pricing_path()
+    if cfg.is_file():
+        prices.update(load_prices(cfg))
+    if explicit is not None:
+        prices.update(load_prices(explicit))
+    return prices
+
+
+def price_for(prices: dict[str, ModelPrice], model: str | None) -> ModelPrice | None:
+    """Exact match, else the longest listed id that prefixes the model (dated ids)."""
+    if not model:
+        return None
+    if model in prices:
+        return prices[model]
+    hits = [k for k in prices if model.startswith(k)]
+    return prices[max(hits, key=len)] if hits else None

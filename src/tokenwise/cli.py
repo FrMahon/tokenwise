@@ -7,6 +7,7 @@ from .db import connect
 from .features import build_features
 from .ingest.loader import ingest_dir
 from .labels import build_labels
+from .pricing import load_effective_prices
 from .paths import default_db_path, default_sessions_dir
 from .report import render
 from .transform import build_layers
@@ -22,6 +23,7 @@ def _parser() -> argparse.ArgumentParser:
         p = sub.add_parser(name, help=help_)
         p.add_argument("--sessions-dir", type=Path, default=default_sessions_dir())
         p.add_argument("--db", type=Path, default=default_db_path())
+        p.add_argument("--pricing", type=Path, default=None, help="extra pricing.toml (USD per million tokens)")
     return ap
 
 
@@ -51,9 +53,14 @@ def main(argv: list[str] | None = None) -> int:
     if df.empty:
         print("No tool calls found in these sessions; nothing to analyze.", file=sys.stderr)
         return 1
-    result = M.train(df)
+    try:
+        result = M.train(df)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     if args.cmd == "train":
         print(f"source={result.source} metrics={result.metrics}")
         return 0
-    print(render(con, result, M.predict_proba(result, df), skipped_lines=stats.skipped_lines))
+    print(render(con, result, M.predict_proba(result, df), skipped_lines=stats.skipped_lines,
+                 prices=load_effective_prices(args.pricing)))
     return 0

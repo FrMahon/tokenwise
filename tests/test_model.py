@@ -72,3 +72,17 @@ def test_save_load_roundtrip(tmp_path):
     M.save(res, tmp_path / "m.joblib")
     again = M.load(tmp_path / "m.joblib")
     assert np.allclose(M.predict_proba(res, df), M.predict_proba(again, df))
+
+
+def test_bundled_baseline_loads_and_predicts():
+    pipe = M.load_baseline()
+    assert pipe is not None
+    probs = M.predict_proba(M.TrainResult(pipe, {}, "baseline"), planted(n_sessions=2, per=5))
+    assert len(probs) == 10 and ((probs >= 0) & (probs <= 1)).all()
+
+
+def test_unreadable_baseline_returns_none(monkeypatch):
+    def boom(*a, **k):
+        raise ModuleNotFoundError("numpy._core")
+    monkeypatch.setattr(M.joblib, "load", boom)
+    assert M.load_baseline() is None

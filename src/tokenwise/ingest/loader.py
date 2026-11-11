@@ -5,6 +5,7 @@ from pathlib import Path
 from .parser import COLUMNS, parse_line
 
 BATCH = 5000
+NEWLINE = chr(10)
 
 
 @dataclass
@@ -22,23 +23,36 @@ def _flush(con, rows):
         rows.clear()
 
 
+def _identity(root: Path, path: Path) -> tuple[str, str]:
+    """(project, session_id) from the path under the sessions folder; subagent files nest deeper."""
+    parts = path.relative_to(root).with_suffix("").parts
+    if len(parts) == 1:
+        return "", parts[0]
+    return parts[0], "/".join(parts[1:])
+
+
 def ingest_dir(sessions_dir: Path, con) -> IngestStats:
+    root = Path(sessions_dir)
     stats = IngestStats()
-    for path in sorted(Path(sessions_dir).glob("*/*.jsonl")):
-        key = str(path)
+    for path in sorted(root.rglob("*.jsonl")):
+        key = str(path.resolve())
         size = path.stat().st_size
         seen = con.execute("SELECT size, lines_read FROM ingest_files WHERE path = ?", [key]).fetchone()
         if seen and seen[0] == size:
             continue
         start = seen[1] if seen else 0
+        project, session_id = _identity(root, path)
         stats.files += 1
         rows: list[dict] = []
-        line_no = 0
+        complete = start
         with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
             for line_no, line in enumerate(f, start=1):
+                if not line.endswith(NEWLINE):
+                    break  # half-written last line: leave it for the next run
+                complete = line_no
                 if line_no <= start:
                     continue
-                parsed = parse_line(line, path.stem, path.parent.name, line_no)
+                parsed = parse_line(line, session_id, project, line_no)
                 if parsed:
                     rows.extend(parsed)
                     stats.new_rows += len(parsed)
@@ -48,5 +62,5 @@ def ingest_dir(sessions_dir: Path, con) -> IngestStats:
                     _flush(con, rows)
         _flush(con, rows)
         con.execute("DELETE FROM ingest_files WHERE path = ?", [key])
-        con.execute("INSERT INTO ingest_files VALUES (?, ?, ?)", [key, size, max(line_no, start)])
+        con.execute("INSERT INTO ingest_files VALUES (?, ?, ?)", [key, size, complete])
     return stats

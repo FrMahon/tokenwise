@@ -24,14 +24,15 @@ def test_ingest_twice_no_duplicates(tmp_path):
 
 
 def test_file_grown_between_runs_adds_only_new_rows(tmp_path):
-    p = write_session(tmp_path / "proj", "s1", [step(0)])
+    root = tmp_path / "sessions"
+    p = write_session(root / "proj", "s1", [step(0)])
     con = connect(":memory:")
-    ingest_dir(tmp_path, con)
+    ingest_dir(root, con)
     before = count(con)
-    extra = write_session(tmp_path / "x" / "y", "tmp", [step(1)]).read_text()
+    extra = write_session(tmp_path / "helper", "tmp", [step(1)]).read_text()
     with p.open("a", encoding="utf-8") as f:
         f.write(extra)
-    stats = ingest_dir(tmp_path, con)
+    stats = ingest_dir(root, con)
     assert stats.new_rows == 3 and count(con) == before + 3
 
 
@@ -50,3 +51,35 @@ def test_non_utf8_bytes_do_not_crash(tmp_path):
     con = connect(":memory:")
     stats = ingest_dir(tmp_path, con)
     assert stats.skipped_lines == 1 and count(con) == 3
+
+
+def test_partial_last_line_is_read_once_completed(tmp_path):
+    p = write_session(tmp_path / "proj", "s1", [step(0), step(1)])
+    full = p.read_text(encoding="utf-8")
+    fresh = connect(":memory:")
+    ingest_dir(tmp_path, fresh)
+    expected = count(fresh)
+    p.write_text(full[:-25], encoding="utf-8")  # cut mid-line, as during a live session
+    con = connect(":memory:")
+    ingest_dir(tmp_path, con)
+    assert count(con) < expected
+    p.write_text(full, encoding="utf-8")
+    ingest_dir(tmp_path, con)
+    assert count(con) == expected
+
+
+def test_same_folder_other_spelling_no_duplicates(tmp_path):
+    write_session(tmp_path / "proj", "s1", [step(0), step(1)])
+    con = connect(":memory:")
+    ingest_dir(tmp_path, con)
+    n = count(con)
+    ingest_dir(tmp_path / "proj" / "..", con)
+    assert count(con) == n
+
+
+def test_subagent_transcripts_are_ingested(tmp_path):
+    write_session(tmp_path / "proj" / "s1" / "subagents", "agent-x", [step(0)])
+    con = connect(":memory:")
+    stats = ingest_dir(tmp_path, con)
+    assert stats.files == 1 and count(con) == 3
+    assert con.execute("SELECT DISTINCT project FROM raw_events").fetchall() == [("proj",)]
