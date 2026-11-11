@@ -1,5 +1,16 @@
+import pytest
+
 from synth import write_session
+from test_model import planted
+from tokenwise import model as M
 from tokenwise.cli import main
+
+
+@pytest.fixture(autouse=True)
+def fixed_baseline(monkeypatch):
+    # hermetic: do not depend on the bundled baseline's learned behavior
+    pipe = M.fit(planted())
+    monkeypatch.setattr(M, "load_baseline", lambda: pipe)
 
 
 def make_sessions(root, model="claude-sonnet-5-5", n=6):
