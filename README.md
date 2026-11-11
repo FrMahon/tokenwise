@@ -7,13 +7,13 @@ Real output on 40 synthetic sessions (generated with `scripts/make_demo_sessions
 ```
 $ tokenwise report
 Sessions analyzed: 40
-Estimated spend: $202.24
-Avoidable: $42.20 (21%)
+Estimated spend: $124.27
+Avoidable: $22.44 (18%)
 
 Top leaks
-  1. bulky_unused     $29.98
-  2. repeat           $8.27
-  3. other patterns   $3.96
+  1. bulky_unused     $15.56
+  2. repeat           $4.67
+  3. other patterns   $2.21
 
 Model: personal (AUC 0.78)
 ```
