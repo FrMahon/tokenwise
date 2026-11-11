@@ -50,7 +50,7 @@ See [SECURITY.md](SECURITY.md). The bundled model is stored in a safe format (no
 
 - "Avoidable" has no ground truth. The model predicts *patterns* of waste defined above, not verdicts.
 - Claude Code's session format is not a public API and may change; unreadable lines are counted and skipped.
-- `pricing.toml` holds estimates. Override them with `--pricing FILE` or a `pricing.toml` in your user config folder (merged over the bundled prices; dated model ids match by prefix). Models without a price are listed and excluded. The report warns when the bundled prices were last checked more than 90 days ago.
+- `pricing.toml` holds estimates. Override them with `--pricing FILE` or a `pricing.toml` in your user config folder (merged over the bundled prices; dated model ids match by prefix). Models without a price are listed and excluded. Cache writes with a 5-minute TTL are billed at 1.25x the input price (override with `cache_write_5m`); sessions ingested before this was recorded are billed at the 1-hour rate. Messages replayed by a resumed session are counted once. The report warns when the bundled prices were last checked more than 90 days ago.
 
 ## Development
 

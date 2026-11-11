@@ -80,3 +80,9 @@ def test_report_warns_when_prices_are_old(tmp_path, capsys, monkeypatch):
     make_sessions(tmp_path / "sess")
     code, out, _ = run(tmp_path, capsys)
     assert code == 0 and "2020-01-01" in out
+
+
+def test_synthetic_placeholder_model_is_not_flagged_as_unpriced(tmp_path, capsys):
+    make_sessions(tmp_path / "sess", model="<synthetic>")
+    code, out, _ = run(tmp_path, capsys)
+    assert code == 0 and "no price" not in out

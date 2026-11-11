@@ -3,7 +3,10 @@ from collections import defaultdict
 
 from .model import THRESHOLD, TrainResult
 from .pricing import (CHARS_PER_TOKEN, bundled_prices_date, default_user_pricing_path, load_effective_prices,
-                      price_for, stale_note, step_cost, turn_cost)
+                      blended_step_price, price_for, stale_note, step_cost, turn_cost)
+
+
+SYNTHETIC = "<synthetic>"  # Claude Code placeholder for messages it writes itself (no tokens, no price)
 
 
 def _money(x: float) -> str:
@@ -14,12 +17,16 @@ def render(con, result: TrainResult, probs, *, skipped_lines: int = 0, prices=No
     prices = prices if prices is not None else load_effective_prices()
     sessions = con.execute("SELECT count(DISTINCT session_id) FROM turns").fetchone()[0]
 
-    total, unpriced = 0.0, defaultdict(int)
-    for model, i, o, cw, cr in con.execute(
+    total, unpriced, share_5m = 0.0, defaultdict(int), {}
+    for model, i, o, cw, cw5, cr in con.execute(
             "SELECT model, sum(input_tokens), sum(output_tokens), sum(cache_write_tokens), "
-            "sum(cache_read_tokens) FROM turns GROUP BY model").fetchall():
+            "sum(cache_write_5m_tokens), sum(cache_read_tokens) FROM turns GROUP BY model").fetchall():
+        if model == SYNTHETIC:
+            continue
+        share_5m[model] = (cw5 / cw) if cw else 0.0
         c = turn_cost(price_for(prices, model), {"input_tokens": i, "output_tokens": o,
-                                          "cache_write_tokens": cw, "cache_read_tokens": cr})
+                                          "cache_write_tokens": cw, "cache_write_5m_tokens": cw5,
+                                          "cache_read_tokens": cr})
         if c is None:
             unpriced[model or "unknown"] += 1
         else:
@@ -33,7 +40,7 @@ def render(con, result: TrainResult, probs, *, skipped_lines: int = 0, prices=No
     for (model, chars, remaining, repeat, bulky), p in zip(rows, probs):
         if p < THRESHOLD or chars is None:
             continue
-        c = step_cost(price_for(prices, model), chars / CHARS_PER_TOKEN, remaining)
+        c = step_cost(blended_step_price(price_for(prices, model), share_5m.get(model, 0.0)), chars / CHARS_PER_TOKEN, remaining)
         if c is None:
             continue
         avoidable += c

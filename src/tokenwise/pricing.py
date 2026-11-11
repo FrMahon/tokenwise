@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from importlib import resources
 from pathlib import Path
@@ -20,6 +20,11 @@ class ModelPrice:
     output: float
     cache_write: float
     cache_read: float
+    cache_write_5m: float | None = None  # default: 1.25 x input, the published 5-minute write rate
+
+    @property
+    def write_5m(self) -> float:
+        return self.cache_write_5m if self.cache_write_5m is not None else self.input * 1.25
 
 
 def load_prices(path: Path | None = None) -> dict[str, ModelPrice]:
@@ -48,9 +53,18 @@ def stale_note(as_of: date, today: date | None = None) -> str | None:
 def turn_cost(price: ModelPrice | None, turn: dict) -> float | None:
     if price is None:
         return None
+    # Writes with a known 5-minute TTL are cheaper; the rest (1 hour, or unknown in older rows) bill at the 1-hour rate.
+    short = min(turn.get("cache_write_5m_tokens") or 0, turn["cache_write_tokens"])
     return (turn["input_tokens"] * price.input + turn["output_tokens"] * price.output
-            + turn["cache_write_tokens"] * price.cache_write
+            + short * price.write_5m + (turn["cache_write_tokens"] - short) * price.cache_write
             + turn["cache_read_tokens"] * price.cache_read) / 1e6
+
+
+def blended_step_price(price: ModelPrice | None, share_5m: float) -> ModelPrice | None:
+    """Price whose cache_write is the average of the 5-minute and 1-hour rates, weighted by usage."""
+    if price is None:
+        return None
+    return replace(price, cache_write=share_5m * price.write_5m + (1 - share_5m) * price.cache_write)
 
 
 def step_cost(price: ModelPrice | None, result_tokens: float, turns_remaining: int) -> float | None:

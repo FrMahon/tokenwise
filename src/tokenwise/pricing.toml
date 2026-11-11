@@ -2,7 +2,7 @@
 # Checked 2026-11-11 against https://platform.claude.com/docs/en/about-claude/pricing
 # Prices change; edit freely or override with --pricing FILE. Models missing here are
 # reported as "no price".
-# Haiku 5.5 uses the rate for prompts up to 100K tokens (longer prompts cost more).
+# Optional per model: cache_write_5m (default 1.25 x input). Haiku 5.5 uses the rate for prompts up to 100K tokens (longer prompts cost more).
 
 as_of = 2026-11-11
 
