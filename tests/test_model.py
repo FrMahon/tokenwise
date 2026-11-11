@@ -86,3 +86,17 @@ def test_unreadable_baseline_returns_none(monkeypatch):
         raise ModuleNotFoundError("numpy._core")
     monkeypatch.setattr(M.joblib, "load", boom)
     assert M.load_baseline() is None
+
+
+def test_nonstandard_tools_are_bucketed_as_other(tmp_path):
+    write_session(tmp_path / "p", "s1", [
+        {"tool": "mcp__some_server__do_thing", "input": {"x": 1}, "result": "r"},
+        {"tool": "Read", "input": {"file_path": "/a"}, "result": "r"},
+    ])
+    con = connect(":memory:")
+    ingest_dir(tmp_path, con)
+    build_layers(con)
+    build_labels(con)
+    df = build_features(con).sort_values("step_idx")
+    assert df["tool_name"].tolist() == ["other", "Read"]
+    assert df["prev_tool_name"].tolist() == ["none", "other"]

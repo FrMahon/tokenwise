@@ -7,6 +7,11 @@ FEATURES = CATEGORICAL + NUMERIC
 KEYS = ["session_id", "step_idx", "ts"]
 TARGET = "wasted"
 NEVER_SEEN = 999
+# Built-in tools only; anything else (MCP servers, plugins) is bucketed so the model stays portable.
+STANDARD_TOOLS = frozenset({
+    "Agent", "Task", "AskUserQuestion", "Bash", "Edit", "Glob", "Grep", "NotebookEdit", "PowerShell",
+    "Read", "Skill", "TodoWrite", "ToolSearch", "WebFetch", "WebSearch", "Write",
+})
 
 
 def build_features(con) -> pd.DataFrame:
@@ -18,6 +23,7 @@ def build_features(con) -> pd.DataFrame:
     """).df()
     if df.empty:
         return df.assign(prev_tool_name=[], steps_since_same_tool=[], same_input_seen_before=[], hour=[])
+    df["tool_name"] = df["tool_name"].where(df["tool_name"].isin(STANDARD_TOOLS), "other")
     g = df.groupby("session_id", sort=False)
     df["prev_tool_name"] = g["tool_name"].shift(1).fillna("none")
     pos = g.cumcount()
