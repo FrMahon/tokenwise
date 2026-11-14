@@ -36,6 +36,7 @@ Every installed skill adds its name and description to the prompt of every sessi
 $ tokenwise skills            # last 30 days; use --days N to change
 Skills loaded in 12 sessions (last 30 days)
 Estimated cost of carrying skill descriptions: $1.20 (~900 tokens/session). Token counts are estimates.
+Data covers 2026-01-01 to 2026-01-12 (12 days), less than the 30 requested
 
 By plugin
   big-plugin   3 skills  ~700 tokens/session  0 uses  $0.90  unused

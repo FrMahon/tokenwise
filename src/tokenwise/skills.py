@@ -1,7 +1,7 @@
 """Cost of carrying skill descriptions in every session, and how often each skill is actually used."""
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from .pricing import CHARS_PER_TOKEN, blended_step_price, price_for, step_cost
 
@@ -25,6 +25,8 @@ class SkillReport:
     sessions: int  # sessions in the window that loaded a skill listing
     unpriced: list[str]  # model ids without a price; their sessions add no cost
     days: int
+    data_from: str | None = None  # first and last day (UTC, YYYY-MM-DD) the data actually covers
+    data_to: str | None = None
 
 
 def plugin_of(name: str) -> str:
@@ -37,13 +39,15 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
 
     listed = con.execute("""
         WITH first AS (SELECT session_id, min(ts) AS t FROM raw_events WHERE type = 'skill_listed' GROUP BY session_id)
-        SELECT e.session_id, e.skill_name, max(e.result_chars)
+        SELECT e.session_id, e.skill_name, max(e.result_chars), min(f.t)
         FROM raw_events e JOIN first f USING (session_id)
         WHERE e.type = 'skill_listed' AND f.t >= ? AND e.skill_name IS NOT NULL
         GROUP BY e.session_id, e.skill_name""", [cutoff]).fetchall()
     per_session: dict[str, dict[str, int]] = defaultdict(dict)
-    for session, name, chars in listed:
+    started: dict[str, str] = {}
+    for session, name, chars, t in listed:
         per_session[session][name] = chars or 0
+        started[session] = t
 
     info = {s: (turns, model) for s, turns, model in con.execute(
         "SELECT session_id, count(*), arg_min(model, turn_idx) FILTER (WHERE model <> ?) "
@@ -55,11 +59,13 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
     cost: dict[str, float] = defaultdict(float)
     unpriced: set[str] = set()
     sessions = 0
+    starts: list[str] = []
     for session, entries in per_session.items():
         turns, model = info.get(session, (0, None))
         if turns == 0:
             continue
         sessions += 1
+        starts.append(started[session])
         price = blended_step_price(price_for(prices, model), share_5m.get(model, 0.0))
         if price is None:
             unpriced.add(model or "unknown")
@@ -77,7 +83,9 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
     stats = [SkillStat(name, plugin_of(name), sum(t) / len(t), len(t), uses.get(name, 0), cost[name])
              for name, t in tokens.items()]
     stats.sort(key=lambda s: (-s.cost, s.name))
-    return SkillReport(stats, sessions, sorted(unpriced), days)
+    last = con.execute("SELECT max(ts) FROM raw_events WHERE ts >= ?", [cutoff]).fetchone()[0]
+    return SkillReport(stats, sessions, sorted(unpriced), days,
+                       min(starts)[:10] if starts else None, last[:10] if last else None)
 
 
 def _line(label: str, tokens: float, uses: int, cost: float, extra: str = "") -> str:
@@ -96,7 +104,12 @@ def render_skills(report: SkillReport) -> str:
     rollup = sorted(((p, ss, sum(x.cost for x in ss)) for p, ss in plugins.items()), key=lambda t: (-t[2], t[0]))
     lines = [f"Skills loaded in {report.sessions} sessions (last {report.days} days)",
              f"Estimated cost of carrying skill descriptions: ${total_cost:,.2f} (~{total_tokens:,.0f} tokens/session). "
-             "Token counts are estimates.", "", "By plugin"]
+             "Token counts are estimates."]
+    if report.data_from and report.data_to:
+        span = (date.fromisoformat(report.data_to) - date.fromisoformat(report.data_from)).days + 1
+        short = f", less than the {report.days} requested" if span < report.days else ""
+        lines.append(f"Data covers {report.data_from} to {report.data_to} ({span} days){short}")
+    lines += ["", "By plugin"]
     for plugin, ss, cost in rollup:
         lines.append(_line(plugin, sum(x.tokens_per_session for x in ss), sum(x.uses for x in ss), cost,
                            extra=f"{len(ss)} skills  "))

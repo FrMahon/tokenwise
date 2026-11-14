@@ -100,3 +100,19 @@ def test_render_flags_unused_and_orders():
 def test_render_empty():
     from tokenwise.skills import SkillReport, render_skills
     assert render_skills(SkillReport([], 0, [], 30)) == "No skill listings found in the last 30 days."
+
+
+def test_report_says_which_dates_the_data_covers(tmp_path):
+    s1 = [listing_line(ts(5), ENTRIES), asst_line(ts(5, 1), "a1")]
+    s2 = [listing_line(ts(6), ENTRIES), asst_line(ts(6, 1), "b1")]
+    rep = report(tmp_path, {"s1": s1, "s2": s2}, days=30)
+    assert (rep.data_from, rep.data_to) == ("2026-01-05", "2026-01-06")
+
+
+def test_render_shows_covered_range_and_flags_a_short_one():
+    from tokenwise.skills import SkillReport, SkillStat, render_skills
+    skills = [SkillStat("a:one", "a", 500.0, 3, 0, 2.0)]
+    short = render_skills(SkillReport(skills, 3, [], 30, "2026-01-05", "2026-01-13"))
+    assert "Data covers 2026-01-05 to 2026-01-13 (9 days), less than the 30 requested" in short
+    full = render_skills(SkillReport(skills, 3, [], 7, "2026-01-05", "2026-01-13"))
+    assert "Data covers 2026-01-05 to 2026-01-13 (9 days)" in full and "less than" not in full
