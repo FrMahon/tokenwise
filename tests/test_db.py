@@ -36,3 +36,20 @@ def test_old_database_gains_skill_name(tmp_path):
     con = connect(tmp_path / "o.duckdb")
     assert "skill_name" in {r[0] for r in con.execute("DESCRIBE raw_events").fetchall()}
     assert con.execute("SELECT count(*) FROM raw_events").fetchone()[0] == 1
+
+
+def test_migration_queues_existing_files_for_skill_backfill(tmp_path):
+    import duckdb
+    old = duckdb.connect(str(tmp_path / "o.duckdb"))
+    old.execute("""CREATE TABLE raw_events (
+        session_id VARCHAR, project VARCHAR, line_no BIGINT, type VARCHAR, ts VARCHAR, message_id VARCHAR,
+        model VARCHAR, input_tokens BIGINT, output_tokens BIGINT, cache_write_tokens BIGINT,
+        cache_read_tokens BIGINT, tool_name VARCHAR, tool_use_id VARCHAR, input_hash VARCHAR,
+        result_chars BIGINT, result_hash VARCHAR, is_error BOOLEAN, cache_write_5m_tokens BIGINT)""")
+    old.execute("CREATE TABLE ingest_files (path VARCHAR PRIMARY KEY, size BIGINT, lines_read BIGINT)")
+    old.execute("INSERT INTO ingest_files VALUES ('/a.jsonl', 10, 3)")
+    old.close()
+    con = connect(tmp_path / "o.duckdb")
+    assert con.execute("SELECT path FROM skill_backfill").fetchall() == [("/a.jsonl",)]
+    assert connect(tmp_path / "o.duckdb").execute("SELECT count(*) FROM skill_backfill").fetchone()[0] == 1  # not re-queued
+    assert connect(tmp_path / "fresh.duckdb").execute("SELECT count(*) FROM skill_backfill").fetchone()[0] == 0

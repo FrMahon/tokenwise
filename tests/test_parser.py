@@ -133,3 +133,15 @@ def test_command_name_inside_tool_result_ignored():
 
 def test_plain_user_text_ignored():
     assert parse(user("hello")) == []
+
+
+def test_skill_slash_command_with_message_first_is_skill_used():
+    text = ("<command-message>superpowers:brainstorming</command-message>\n"
+            "<command-name>/superpowers:brainstorming</command-name>\n<command-args>secret</command-args>")
+    rows = parse(user(text))
+    assert [(r["type"], r["skill_name"]) for r in rows] == [("skill_used", "superpowers:brainstorming")]
+    assert "secret" not in json.dumps(rows)
+
+
+def test_command_name_in_the_middle_of_a_prompt_ignored():
+    assert parse(user("look at this: <command-name>/x</command-name> in my logs")) == []

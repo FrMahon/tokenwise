@@ -136,3 +136,30 @@ def test_ingest_works_with_a_half_read_result_pending(tmp_path):
     con = connect(tmp_path / "t.duckdb")
     con.execute("SELECT * FROM range(10)").fetchone()  # leaves an unfinished result, as a caller might
     assert ingest_dir(tmp_path / "s", con).new_rows > 0
+
+
+def test_backfill_restores_skill_data_for_already_ingested_files(tmp_path):
+    from synth import asst_line, listing_line, skill_call_line, slash_line, write_raw
+    from tokenwise.db import connect
+    from tokenwise.ingest.loader import ingest_dir
+    write_raw(tmp_path / "sess" / "proj", "s1", [
+        listing_line("2026-01-05T00:00:00.000Z", {"p:a": "d" * 20}), asst_line("2026-01-05T00:00:01.000Z", "m1"),
+        skill_call_line("2026-01-05T00:00:02.000Z", "t1", "p:a"), slash_line("2026-01-05T00:00:03.000Z", "/p:a")])
+    con = connect(tmp_path / "t.duckdb")
+    ingest_dir(tmp_path / "sess", con)
+    def skill_rows():
+        return con.execute("SELECT type, skill_name FROM raw_events WHERE skill_name IS NOT NULL ORDER BY line_no").fetchall()
+    expected = skill_rows()
+    assert [t for t, _ in expected] == ["skill_listed", "tool_use", "skill_used"]
+    # simulate a database ingested before skill data existed
+    con.execute("DELETE FROM raw_events WHERE type IN ('skill_listed', 'skill_used')")
+    con.execute("UPDATE raw_events SET skill_name = NULL")
+    con.execute("INSERT INTO skill_backfill SELECT path FROM ingest_files")
+    con.execute("INSERT INTO skill_backfill VALUES ('/gone/file.jsonl')")  # a deleted session file must not break it
+    before = con.execute("SELECT count(*) FROM raw_events").fetchone()[0]
+    ingest_dir(tmp_path / "sess", con)
+    assert skill_rows() == expected
+    assert con.execute("SELECT count(*) FROM raw_events").fetchone()[0] == before + 2  # no duplicated old rows
+    assert con.execute("SELECT count(*) FROM skill_backfill").fetchone()[0] == 0
+    ingest_dir(tmp_path / "sess", con)  # a second run changes nothing
+    assert skill_rows() == expected

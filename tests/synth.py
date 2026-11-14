@@ -62,4 +62,5 @@ def skill_call_line(ts: str, tool_id: str, skill: str) -> dict:
 
 def slash_line(ts: str, command: str) -> dict:
     return {"type": "user", "timestamp": ts, "message": {"role": "user", "content":
-            f"<command-name>{command}</command-name>\n<command-args></command-args>"}}
+            f"<command-message>{command.lstrip('/')}</command-message>\n<command-name>{command}</command-name>\n"
+            "<command-args></command-args>"}}  # the order Claude Code writes for skills

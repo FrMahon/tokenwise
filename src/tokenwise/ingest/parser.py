@@ -56,7 +56,9 @@ def _row(base: dict, **fields) -> dict:
 
 
 _ENTRY_START = re.compile(r"^- (\S+): ", re.MULTILINE)
-_COMMAND = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
+# Skills run with /name are written as <command-message>name</command-message> then <command-name>/name</command-name>;
+# built-ins like /model start with <command-name>. Anchored: a prompt that merely quotes a tag is not a command.
+_COMMAND = re.compile(r"\s*(?:<command-message>[^<]*</command-message>\s*)?<command-name>/?([^<\s]+)</command-name>")
 
 
 def split_listing(content: str) -> dict[str, int]:
@@ -122,7 +124,7 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
                                  skill_name=skill if isinstance(skill, str) else None))
     elif d.get("type") == "user":
         text = _user_text(msg.get("content"))
-        cmd = _COMMAND.match(text.lstrip())  # match anchors at the start: only a message that opens with a command
+        cmd = _COMMAND.match(text)
         if cmd:
             rows.append(_row(base, type="skill_used", skill_name=cmd.group(1)))
         for b in content:
