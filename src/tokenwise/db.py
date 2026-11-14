@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS raw_events (
     model VARCHAR, input_tokens BIGINT, output_tokens BIGINT,
     cache_write_tokens BIGINT, cache_read_tokens BIGINT,
     tool_name VARCHAR, tool_use_id VARCHAR, input_hash VARCHAR,
-    result_chars BIGINT, result_hash VARCHAR, is_error BOOLEAN, cache_write_5m_tokens BIGINT
+    result_chars BIGINT, result_hash VARCHAR, is_error BOOLEAN, cache_write_5m_tokens BIGINT,
+    skill_name VARCHAR
 );
 CREATE TABLE IF NOT EXISTS ingest_files (path VARCHAR PRIMARY KEY, size BIGINT, lines_read BIGINT);
 """
@@ -22,4 +23,6 @@ def connect(path: Path | str) -> duckdb.DuckDBPyConnection:
     cols = {r[0] for r in con.execute("DESCRIBE raw_events").fetchall()}
     if "cache_write_5m_tokens" not in cols:  # database from an older version: keep history, add the column
         con.execute("ALTER TABLE raw_events ADD COLUMN cache_write_5m_tokens BIGINT")
+    if "skill_name" not in cols:
+        con.execute("ALTER TABLE raw_events ADD COLUMN skill_name VARCHAR")
     return con

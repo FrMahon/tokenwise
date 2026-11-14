@@ -91,5 +91,5 @@ def test_old_database_gets_the_new_column(tmp_path):
     old.close()
     con = connect(path)
     cols = [r[0] for r in con.execute("DESCRIBE raw_events").fetchall()]
-    assert cols[-1] == "cache_write_5m_tokens"
+    assert cols[-2:] == ["cache_write_5m_tokens", "skill_name"]  # each migration appends at the end, in order
     assert con.execute("SELECT count(*) FROM raw_events").fetchone()[0] == 1  # history is kept

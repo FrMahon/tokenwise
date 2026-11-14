@@ -4,12 +4,14 @@ Only sizes, token counts and sha1 hashes are kept; conversation text is dropped.
 """
 import hashlib
 import json
+import re
 
 COLUMNS = (
     "session_id", "project", "line_no", "type", "ts", "message_id", "model",
     "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens",
     "tool_name", "tool_use_id", "input_hash", "result_chars", "result_hash", "is_error",
-    "cache_write_5m_tokens",  # keep last: databases created before it gained the column at the end
+    "cache_write_5m_tokens",  # databases created before it gained the column at the end
+    "skill_name",  # keep last: same reason
 )
 
 
@@ -53,6 +55,30 @@ def _row(base: dict, **fields) -> dict:
     return row
 
 
+_ENTRY_START = re.compile(r"^- (\S+): ", re.MULTILINE)
+_COMMAND = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
+
+
+def split_listing(content: str) -> dict[str, int]:
+    """Skill name -> length of its `name: description` entry in a skill listing (text itself is not kept)."""
+    starts = list(_ENTRY_START.finditer(content))
+    out: dict[str, int] = {}
+    for i, m in enumerate(starts):
+        end = starts[i + 1].start() if i + 1 < len(starts) else len(content)
+        entry = content[m.start() + 2:end].rstrip("\n")  # skip the leading "- "
+        out[m.group(1)] = len(entry)
+    return out
+
+
+def _user_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(b["text"] for b in content
+                       if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str))
+    return ""
+
+
 def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[dict]:
     try:
         d = json.loads(line)
@@ -64,6 +90,11 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
     # Compaction: the context restarts from a summary, so earlier tool results are not re-read after it.
     if (d.get("type") == "system" and d.get("subtype") == "compact_boundary") or d.get("isCompactSummary") is True:
         return [_row(base, type="compact")]
+    att = d.get("attachment")
+    if d.get("type") == "attachment" and isinstance(att, dict) and att.get("type") == "skill_listing":
+        text = att.get("content")
+        entries = split_listing(text) if isinstance(text, str) else {}
+        return [_row(base, type="skill_listed", skill_name=n, result_chars=c) for n, c in entries.items()]
     msg = d.get("message")
     if not isinstance(msg, dict):
         return []
@@ -83,10 +114,17 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
         ))
         for b in content:
             if isinstance(b, dict) and b.get("type") == "tool_use":
+                inp = b.get("input")
+                skill = inp.get("skill") if b.get("name") == "Skill" and isinstance(inp, dict) else None
                 rows.append(_row(base, type="tool_use", model=msg.get("model"),
                                  tool_name=b.get("name"), tool_use_id=b.get("id"),
-                                 input_hash=_input_hash(b.get("input"))))
+                                 input_hash=_input_hash(inp),
+                                 skill_name=skill if isinstance(skill, str) else None))
     elif d.get("type") == "user":
+        text = _user_text(msg.get("content"))
+        cmd = _COMMAND.match(text.lstrip())  # match anchors at the start: only a message that opens with a command
+        if cmd:
+            rows.append(_row(base, type="skill_used", skill_name=cmd.group(1)))
         for b in content:
             if isinstance(b, dict) and b.get("type") == "tool_result":
                 text = _result_text(b.get("content"))

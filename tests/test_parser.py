@@ -89,3 +89,47 @@ def test_deeply_nested_tool_input_does_not_crash():
 def test_out_of_range_integers_become_null():
     r = parse(asst({"input_tokens": 99999999999999999999999, "output_tokens": 5}))[0]
     assert r["input_tokens"] is None and r["output_tokens"] == 5
+
+
+def attach(content):
+    return json.dumps({"type": "attachment", "timestamp": "t1",
+                       "attachment": {"type": "skill_listing", "content": content}})
+
+
+def user(content):
+    return json.dumps({"type": "user", "timestamp": "t1", "message": {"role": "user", "content": content}})
+
+
+def test_skill_listing_rows():
+    rows = parse(attach("- a:b: Use when x: y\n  more\n- c: short"))
+    assert [(r["type"], r["skill_name"], r["result_chars"]) for r in rows] == [
+        ("skill_listed", "a:b", len("a:b: Use when x: y\n  more")),
+        ("skill_listed", "c", len("c: short"))]
+    assert "Use when" not in json.dumps(rows)
+
+
+def test_skill_tool_call_stores_name():
+    rows = parse(asst({}, [{"type": "tool_use", "id": "u1", "name": "Skill",
+                            "input": {"skill": "superpowers:brainstorming"}},
+                           {"type": "tool_use", "id": "u2", "name": "Bash", "input": {"command": "ls"}}]))
+    tus = {r["tool_name"]: r for r in rows if r["type"] == "tool_use"}
+    assert tus["Skill"]["skill_name"] == "superpowers:brainstorming"
+    assert tus["Bash"]["skill_name"] is None
+
+
+def test_slash_command_is_skill_used():
+    text = "<command-name>/superpowers:brainstorming</command-name>\n<command-args>secret</command-args>"
+    for content in (text, [{"type": "text", "text": text}]):
+        rows = parse(user(content))
+        assert [(r["type"], r["skill_name"]) for r in rows] == [("skill_used", "superpowers:brainstorming")]
+        assert "secret" not in json.dumps(rows)
+
+
+def test_command_name_inside_tool_result_ignored():
+    rows = parse(user([{"type": "tool_result", "tool_use_id": "u1",
+                        "content": "<command-name>/x</command-name>"}]))
+    assert [r["type"] for r in rows] == ["tool_result"]
+
+
+def test_plain_user_text_ignored():
+    assert parse(user("hello")) == []
