@@ -33,3 +33,33 @@ def write_session(dir: Path, name: str, steps: list[dict]) -> Path:
         })
     path.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
     return path
+
+
+def write_raw(dir: Path, name: str, lines: list[dict]) -> Path:
+    """Write the given dicts as one session file (already in the on-disk line shape)."""
+    dir = Path(dir)
+    dir.mkdir(parents=True, exist_ok=True)
+    path = dir / f"{name}.jsonl"
+    path.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    return path
+
+
+def listing_line(ts: str, entries: dict[str, str]) -> dict:
+    content = "\n".join(f"- {name}: {desc}" for name, desc in entries.items())
+    return {"type": "attachment", "timestamp": ts, "attachment": {"type": "skill_listing", "content": content}}
+
+
+def asst_line(ts: str, msg_id: str, model: str = "claude-sonnet-5-5") -> dict:
+    return {"type": "assistant", "timestamp": ts,
+            "message": {"role": "assistant", "id": msg_id, "model": model, "usage": DEFAULT_USAGE, "content": []}}
+
+
+def skill_call_line(ts: str, tool_id: str, skill: str) -> dict:
+    line = asst_line(ts, f"msg_{tool_id}")
+    line["message"]["content"] = [{"type": "tool_use", "id": tool_id, "name": "Skill", "input": {"skill": skill}}]
+    return line
+
+
+def slash_line(ts: str, command: str) -> dict:
+    return {"type": "user", "timestamp": ts, "message": {"role": "user", "content":
+            f"<command-name>{command}</command-name>\n<command-args></command-args>"}}
