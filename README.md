@@ -26,7 +26,27 @@ tokenwise report
 ```
 
 By default it reads `~/.claude/projects`; use `--sessions-dir` and `--db` to change locations.
-Commands: `ingest`, `train`, `report`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
+Commands: `ingest`, `train`, `report`, `skills`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
+
+## Which skills cost you tokens
+
+Every installed skill adds its name and description to the prompt of every session, whether you use it or not. `tokenwise skills` lists them all by the estimated cost of carrying that text, with how many times you used each one, and marks the ones with zero uses as `unused`.
+
+```
+$ tokenwise skills            # last 30 days; use --days N to change
+Skills loaded in 12 sessions (last 30 days)
+Estimated cost of carrying skill descriptions: $1.20 (~900 tokens/session). Token counts are estimates.
+
+By plugin
+  big-plugin   3 skills  ~700 tokens/session  0 uses  $0.90  unused
+  my-tools   1 skills  ~200 tokens/session  5 uses  $0.30
+
+All skills
+  big-plugin:pdf   ~400 tokens/session  0 uses  $0.50  unused
+  ...
+```
+
+(Synthetic numbers.) Token counts are estimated from the length of each description, and uses include both the Skill tool and `/skill` commands. Only skill names and description lengths are stored, never the text.
 
 ## Use it from Claude Code
 

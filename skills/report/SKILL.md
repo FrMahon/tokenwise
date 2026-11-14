@@ -34,3 +34,5 @@ tokenwise is a command line tool that reads the user's local Claude Code session
 ## Other commands
 
 `tokenwise ingest` only loads new sessions. `tokenwise train` prints the model metrics. `--retrain` forces a new model. `--sessions-dir` and `--db` change the locations.
+
+`tokenwise skills` lists every installed skill by the estimated cost of its description (loaded into every session) and flags the ones with zero uses in the last 30 days (`--days N` changes the window). Suggest uninstalling a plugin only when it is flagged `unused`, and say that the user decides. Costs are estimates from description length.
