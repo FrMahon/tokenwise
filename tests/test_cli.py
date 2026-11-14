@@ -86,3 +86,32 @@ def test_synthetic_placeholder_model_is_not_flagged_as_unpriced(tmp_path, capsys
     make_sessions(tmp_path / "sess", model="<synthetic>")
     code, out, _ = run(tmp_path, capsys)
     assert code == 0 and "no price" not in out
+
+
+def skills_sessions(root):
+    from datetime import datetime, timezone
+    from synth import asst_line, listing_line, skill_call_line, write_raw
+    t = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    lines = [listing_line(t, {"p:used": "a" * 100, "p:idle": "b" * 100}), asst_line(t, "a1"), asst_line(t, "a2"),
+             skill_call_line(t, "t1", "p:used")]
+    write_raw(root / "proj", "s1", lines)
+
+
+def test_skills_command_end_to_end(tmp_path, capsys):
+    skills_sessions(tmp_path / "sess")
+    code, out, _ = run_cmd(tmp_path, capsys, "skills")
+    assert code == 0 and "By plugin" in out and "All skills" in out
+    line = {l.split()[0]: l for l in out.splitlines() if l.strip() and "tokens/session" in l}
+    assert "unused" in line["p:idle"] and "unused" not in line["p:used"]
+
+
+def test_skills_command_no_listings_exits_zero(tmp_path, capsys):
+    make_sessions(tmp_path / "sess")
+    code, out, _ = run_cmd(tmp_path, capsys, "skills")
+    assert code == 0 and "No skill listings found" in out
+
+
+def run_cmd(tmp_path, capsys, cmd, *extra):
+    code = main([cmd, "--sessions-dir", str(tmp_path / "sess"), "--db", str(tmp_path / "t.duckdb"), *extra])
+    out = capsys.readouterr()
+    return code, out.out, out.err

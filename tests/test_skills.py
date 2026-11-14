@@ -80,3 +80,23 @@ def test_no_listings(tmp_path):
 def test_plugin_of():
     assert plugin_of("superpowers:brainstorming") == "superpowers"
     assert plugin_of("init") == "(no plugin)"
+
+
+def test_render_flags_unused_and_orders():
+    from tokenwise.skills import SkillReport, SkillStat, render_skills
+    rep = SkillReport([SkillStat("a:one", "a", 500.0, 3, 0, 2.0), SkillStat("b:two", "b", 100.0, 3, 4, 1.0),
+                       SkillStat("a:three", "a", 50.0, 3, 0, 0.5)], 3, ["mystery-model"], 30)
+    out = render_skills(rep)
+    head, rest = out.split("All skills")
+    assert "By plugin" in head and "Skills loaded in 3 sessions (last 30 days)" in head
+    lines = [l for l in rest.splitlines() if l.strip()]
+    assert [l.split()[0] for l in lines if "tokens/session" in l] == ["a:one", "b:two", "a:three"]
+    assert {l.split()[0] for l in lines if "unused" in l} == {"a:one", "a:three"}
+    plugin_lines = [l for l in head.splitlines() if "skills " in l and "tokens/session" in l]
+    assert [l.split()[0] for l in plugin_lines] == ["a", "b"] and "unused" in plugin_lines[0] and "unused" not in plugin_lines[1]
+    assert "Warning: no price for mystery-model" in out
+
+
+def test_render_empty():
+    from tokenwise.skills import SkillReport, render_skills
+    assert render_skills(SkillReport([], 0, [], 30)) == "No skill listings found in the last 30 days."

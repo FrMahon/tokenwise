@@ -78,3 +78,30 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
              for name, t in tokens.items()]
     stats.sort(key=lambda s: (-s.cost, s.name))
     return SkillReport(stats, sessions, sorted(unpriced), days)
+
+
+def _line(label: str, tokens: float, uses: int, cost: float, extra: str = "") -> str:
+    flag = "  unused" if uses == 0 else ""
+    return f"  {label}   {extra}~{tokens:,.0f} tokens/session  {uses} uses  ${cost:,.2f}{flag}"
+
+
+def render_skills(report: SkillReport) -> str:
+    if not report.skills:
+        return f"No skill listings found in the last {report.days} days."
+    total_tokens = sum(s.tokens_per_session for s in report.skills)
+    total_cost = sum(s.cost for s in report.skills)
+    plugins: dict[str, list[SkillStat]] = defaultdict(list)
+    for s in report.skills:
+        plugins[s.plugin].append(s)
+    rollup = sorted(((p, ss, sum(x.cost for x in ss)) for p, ss in plugins.items()), key=lambda t: (-t[2], t[0]))
+    lines = [f"Skills loaded in {report.sessions} sessions (last {report.days} days)",
+             f"Estimated cost of carrying skill descriptions: ${total_cost:,.2f} (~{total_tokens:,.0f} tokens/session). "
+             "Token counts are estimates.", "", "By plugin"]
+    for plugin, ss, cost in rollup:
+        lines.append(_line(plugin, sum(x.tokens_per_session for x in ss), sum(x.uses for x in ss), cost,
+                           extra=f"{len(ss)} skills  "))
+    lines += ["", "All skills"]
+    lines += [_line(s.name, s.tokens_per_session, s.uses, s.cost) for s in report.skills]
+    if report.unpriced:
+        lines += ["", "Warning: no price for " + ", ".join(report.unpriced) + " - their cost is excluded."]
+    return "\n".join(lines)
