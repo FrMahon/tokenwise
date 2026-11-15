@@ -1,5 +1,5 @@
 """Waste labels derived from the data itself (no human labels exist)."""
-from .pricing import CHARS_PER_TOKEN
+from .tokens import CHARS_PER_TOKEN
 
 
 

@@ -13,7 +13,6 @@ def fixed_baseline(monkeypatch):
     # hermetic: do not depend on the bundled baseline's learned behavior
     pipe = M.fit(planted())
     monkeypatch.setattr(M, "load_baseline", lambda: pipe)
-    monkeypatch.setattr("tokenwise.pricing.default_user_pricing_path", lambda: Path("/nonexistent/pricing.toml"))
 
 
 def make_sessions(root, model="claude-sonnet-5-5", n=6):
@@ -35,7 +34,7 @@ def test_report_end_to_end_on_synthetic_sessions(tmp_path, capsys):
     code, out, _ = run(tmp_path, capsys)
     assert code == 0
     assert "Sessions analyzed: 6" in out
-    assert "Estimated spend:" in out and "Avoidable:" in out
+    assert "Tokens processed:" in out and "Avoidable:" in out
     assert "Top leaks" in out and "repeat" in out
     assert "Model:" in out
 
@@ -51,20 +50,6 @@ def test_empty_sessions_dir_exits_1_with_message(tmp_path, capsys):
     assert code == 1 and "No sessions" in err
 
 
-def test_unknown_model_warning_shown(tmp_path, capsys):
-    make_sessions(tmp_path / "sess", model="mystery-model")
-    code, out, _ = run(tmp_path, capsys)
-    assert code == 0 and "no price" in out and "mystery-model" in out
-
-
-def test_pricing_flag_removes_unknown_model_warning(tmp_path, capsys):
-    make_sessions(tmp_path / "sess", model="mystery-model")
-    cfg = tmp_path / "prices.toml"
-    cfg.write_text('[models."mystery-model"]\ninput = 1.0\noutput = 1.0\ncache_write = 1.0\ncache_read = 0.1\n')
-    code, out, _ = run(tmp_path, capsys, "--pricing", str(cfg))
-    assert code == 0 and "no price" not in out
-
-
 def test_report_saves_model_and_reuses_it(tmp_path, capsys, monkeypatch):
     make_sessions(tmp_path / "sess")
     run(tmp_path, capsys)
@@ -72,20 +57,6 @@ def test_report_saves_model_and_reuses_it(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(M, "fit", lambda d: (_ for _ in ()).throw(AssertionError("retrained")))
     code, out, _ = run(tmp_path, capsys)
     assert code == 0 and "Model:" in out
-
-
-def test_report_warns_when_prices_are_old(tmp_path, capsys, monkeypatch):
-    from datetime import date
-    monkeypatch.setattr("tokenwise.report.bundled_prices_date", lambda: date(2020, 1, 1))
-    make_sessions(tmp_path / "sess")
-    code, out, _ = run(tmp_path, capsys)
-    assert code == 0 and "2020-01-01" in out
-
-
-def test_synthetic_placeholder_model_is_not_flagged_as_unpriced(tmp_path, capsys):
-    make_sessions(tmp_path / "sess", model="<synthetic>")
-    code, out, _ = run(tmp_path, capsys)
-    assert code == 0 and "no price" not in out
 
 
 def skills_sessions(root):

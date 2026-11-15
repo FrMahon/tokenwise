@@ -7,10 +7,7 @@ from synth import write_session
 from tokenwise.db import connect
 from tokenwise.ingest.loader import ingest_dir
 from tokenwise.ingest.parser import parse_line
-from tokenwise.pricing import ModelPrice, blended_step_price, step_cost, turn_cost
 from tokenwise.transform import build_layers
-
-P = ModelPrice(input=3.0, output=15.0, cache_write=6.0, cache_read=0.3)
 
 
 def steps(n=3):
@@ -59,24 +56,6 @@ def test_parser_reads_5_minute_cache_writes():
     r = parse_line(usage_line({"ephemeral_5m_input_tokens": 400, "ephemeral_1h_input_tokens": 600}), "s", "p", 1)[0]
     assert r["cache_write_5m_tokens"] == 400
     assert parse_line(usage_line(), "s", "p", 1)[0]["cache_write_5m_tokens"] is None
-
-
-def test_turn_cost_bills_5_minute_writes_at_the_cheaper_rate():
-    turn = {"input_tokens": 0, "output_tokens": 0, "cache_write_tokens": 1_000_000,
-            "cache_write_5m_tokens": 1_000_000, "cache_read_tokens": 0}
-    assert turn_cost(P, turn) == pytest.approx(3.0 * 1.25)           # default 5m rate: 1.25 x input
-    assert turn_cost(ModelPrice(3.0, 15.0, 6.0, 0.3, cache_write_5m=3.5), turn) == pytest.approx(3.5)
-    half = dict(turn, cache_write_5m_tokens=500_000)
-    assert turn_cost(P, half) == pytest.approx(0.5 * 3.75 + 0.5 * 6.0)
-    assert turn_cost(P, dict(turn, cache_write_5m_tokens=0)) == pytest.approx(6.0)  # old rows: all 1-hour
-    assert turn_cost(P, {k: v for k, v in turn.items() if k != "cache_write_5m_tokens"}) == pytest.approx(6.0)
-
-
-def test_step_price_blends_by_the_share_of_5_minute_writes():
-    assert blended_step_price(P, 0.0).cache_write == pytest.approx(6.0)
-    assert blended_step_price(P, 1.0).cache_write == pytest.approx(3.75)
-    assert blended_step_price(P, 0.5).cache_write == pytest.approx(4.875)
-    assert step_cost(blended_step_price(P, 1.0), 1_000_000, 0) == pytest.approx(3.75)
 
 
 def test_old_database_gets_the_new_column(tmp_path):

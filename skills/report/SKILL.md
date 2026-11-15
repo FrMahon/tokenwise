@@ -18,14 +18,14 @@ tokenwise is a command line tool that reads the user's local Claude Code session
 
 ## Reading the output
 
-- **Estimated spend** is the cost computed from token counts and the bundled price list.
+- **Tokens processed** is the sum of input, output, cache-write and cache-read tokens. No prices are involved, so there is nothing to keep up to date.
 - **Avoidable** is the part the model predicts as waste, with its share of the total.
 - **Top leaks** can only be:
   - `repeat`: the same tool call with the same input returned an identical result earlier in the session (for example reading an unchanged file twice).
   - `bulky_unused`: a large result (about 4,000 tokens or more) that was not followed by an edit of the same target within the next 10 steps.
   - `other patterns`: predicted waste that fits neither label.
-- Each leak is priced as writing the result into the cache once and re-reading it on every later turn, up to the next compaction.
-- Lines starting with `Warning` or `Note` matter: models without a price are excluded from the cost, and prices older than 90 days may be out of date. The user can override prices with `--pricing FILE`.
+- Each leak is counted as the result's tokens written once and re-read on every later turn, up to the next compaction.
+- Lines starting with `Note` matter: they say when input lines were skipped.
 
 ## Be honest about limits
 

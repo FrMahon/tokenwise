@@ -28,7 +28,7 @@ tokenwise = "tokenwise.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tokenwise = ["pricing.toml", "sql/*.sql", "baseline.skops"]
+tokenwise = ["sql/*.sql", "baseline.skops"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

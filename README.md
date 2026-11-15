@@ -7,13 +7,13 @@ Real output on 40 synthetic sessions (generated with `scripts/make_demo_sessions
 ```
 $ tokenwise report
 Sessions analyzed: 40
-Estimated spend: $124.27
-Avoidable: $22.44 (18%)
+Tokens processed: 412.8M
+Avoidable: 61.3M tokens (15%)
 
 Top leaks
-  1. bulky_unused     $15.56
-  2. repeat           $4.67
-  3. other patterns   $2.21
+  1. bulky_unused     41.2M
+  2. repeat           12.4M
+  3. other patterns   7.7M
 
 Model: personal (AUC 0.78)
 
@@ -38,26 +38,26 @@ Commands: `ingest`, `train`, `report`, `skills`. `report` is the one to run: it 
 
 ## Which skills cost you tokens
 
-Every installed skill adds its name and description to the prompt of every session, whether you use it or not. `tokenwise report` (or `tokenwise skills` for just this part) lists them all by the estimated cost of carrying that text, with how many times you used each one, and marks the ones with zero uses as `unused`.
+Every installed skill adds its name and description to the prompt of every session, whether you use it or not. `tokenwise report` (or `tokenwise skills` for just this part) lists them all by the estimated tokens spent carrying that text (written once, re-read on every later turn), with how many times you used each one, and marks the ones with zero uses as `unused`.
 
 ```
 $ tokenwise skills            # last 30 days; use --days N to change
 Skills loaded in 12 sessions (last 30 days)
-Estimated cost of carrying skill descriptions: $1.20 (~900 tokens/session). Token counts are estimates.
+Skill descriptions: ~900 tokens/session, ~10.8k tokens carried over these sessions. Token counts are estimates.
 Data covers 2026-01-01 to 2026-01-12 (12 days), less than the 30 requested
 
 By plugin
-  big-plugin   3 skills  ~700 tokens/session  0 uses  $0.90  unused
-  my-tools   1 skills  ~200 tokens/session  5 uses  $0.30
+  big-plugin   3 skills  ~700 tokens/session  0 uses  ~8.4k tokens carried  unused
+  my-tools   1 skills  ~200 tokens/session  5 uses  ~2.4k tokens carried
 
 All skills
-  big-plugin:pdf   ~400 tokens/session  0 uses  $0.50  unused
+  big-plugin:pdf   ~400 tokens/session  0 uses  ~4.8k tokens carried  unused
   ...
 ```
 
 (Synthetic numbers.) Token counts are estimated from the length of each description, and uses include both the Skill tool and `/skill` commands. Only skill names and description lengths are stored, never the text.
 
-The same output ends with the MCP tools grouped by plugin or server (`mcp__plugin_X_…` counts as plugin X, `mcp__claude_ai_Y_…` as `claude.ai: Y`): how many tools each lists, how many you called, and `unused` when none. No dollar cost is shown for them, because the transcripts hold tool names, not their schemas.
+The same output ends with the MCP tools grouped by plugin or server (`mcp__plugin_X_…` counts as plugin X, `mcp__claude_ai_Y_…` as `claude.ai: Y`): how many tools each lists, how many you called, and `unused` when none. No size is shown for them, because the transcripts hold tool names, not their schemas.
 
 ## Use it from Claude Code
 
@@ -80,7 +80,7 @@ The skill only runs the `tokenwise` command; it does not install it. If the comm
 2. **DuckDB layers** (SQL): raw events → deduplicated turns → tool-call steps.
 3. **Labels** derived from the data: a step is *waste* if it repeats an identical earlier call+result, or returns a large result that nothing follows up on.
 4. **Model** (gradient boosting) learns from your history to predict waste using only what is known when the tool is called. With fewer than 2000 steps it falls back to a bundled baseline.
-5. **Report** prices the predicted waste with `pricing.toml`.
+5. **Report** counts the predicted waste in tokens (no prices, nothing to keep up to date).
 
 ## Privacy
 
@@ -94,7 +94,7 @@ See [SECURITY.md](SECURITY.md). The bundled model is stored in a safe format (no
 
 - "Avoidable" has no ground truth. The model predicts *patterns* of waste defined above, not verdicts.
 - Claude Code's session format is not a public API and may change; unreadable lines are counted and skipped.
-- `pricing.toml` holds estimates. Override them with `--pricing FILE` or a `pricing.toml` in your user config folder (merged over the bundled prices; dated model ids match by prefix). Models without a price are listed and excluded. Cache writes with a 5-minute TTL are billed at 1.25x the input price (override with `cache_write_5m`); sessions ingested before this was recorded are billed at the 1-hour rate. Messages replayed by a resumed session are counted once. A tool result is only charged for the turns up to the next compaction (compactions in sessions ingested by older versions are not known). Lines over 32 MB are skipped. The report warns when the bundled prices were last checked more than 90 days ago.
+- Everything is counted in tokens, not dollars, so there is no price list to maintain. Cache reads count the same as fresh tokens.
 
 ## Development
 

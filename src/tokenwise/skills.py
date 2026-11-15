@@ -3,9 +3,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from .pricing import CHARS_PER_TOKEN, blended_step_price, price_for, step_cost
+from .tokens import CHARS_PER_TOKEN, carried_tokens, fmt
 
-SYNTHETIC = "<synthetic>"  # Claude Code placeholder for messages it writes itself (no tokens, no price)
 NO_PLUGIN = "(no plugin)"
 
 
@@ -16,7 +15,7 @@ class SkillStat:
     tokens_per_session: float  # estimated, averaged over the sessions where the skill was listed
     sessions: int
     uses: int
-    cost: float
+    carried: float  # estimated tokens spent carrying the description: written once, re-read on every later turn
 
 
 @dataclass
@@ -29,9 +28,8 @@ class McpStat:
 
 @dataclass
 class SkillReport:
-    skills: list[SkillStat]  # cost descending, ties by name
+    skills: list[SkillStat]  # carried tokens descending, ties by name
     sessions: int  # sessions in the window that loaded a skill listing
-    unpriced: list[str]  # model ids without a price; their sessions add no cost
     days: int
     data_from: str | None = None  # first and last day (UTC, YYYY-MM-DD) the data actually covers
     data_to: str | None = None
@@ -52,7 +50,7 @@ def plugin_of(name: str) -> str:
     return name.split(":", 1)[0] if ":" in name else NO_PLUGIN
 
 
-def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = None) -> SkillReport:
+def skill_report(con, *, days: int = 30, now: datetime | None = None) -> SkillReport:
     now = now or datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")  # ISO strings sort like times
 
@@ -68,30 +66,22 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
         per_session[session][name] = chars or 0
         started[session] = t
 
-    info = {s: (turns, model) for s, turns, model in con.execute(
-        "SELECT session_id, count(*), arg_min(model, turn_idx) FILTER (WHERE model <> ?) "
-        "FROM turns GROUP BY session_id", [SYNTHETIC]).fetchall()}
-    share_5m = {m: (cw5 / cw) if cw else 0.0 for m, cw5, cw in con.execute(
-        "SELECT model, sum(cache_write_5m_tokens), sum(cache_write_tokens) FROM turns GROUP BY model").fetchall()}
+    turn_counts = dict(con.execute("SELECT session_id, count(*) FROM turns GROUP BY session_id").fetchall())
 
     tokens: dict[str, list[float]] = defaultdict(list)
-    cost: dict[str, float] = defaultdict(float)
-    unpriced: set[str] = set()
+    carried: dict[str, float] = defaultdict(float)
     sessions = 0
     starts: list[str] = []
     for session, entries in per_session.items():
-        turns, model = info.get(session, (0, None))
+        turns = turn_counts.get(session, 0)
         if turns == 0:
             continue
         sessions += 1
         starts.append(started[session])
-        price = blended_step_price(price_for(prices, model), share_5m.get(model, 0.0))
-        if price is None:
-            unpriced.add(model or "unknown")
         for name, chars in entries.items():
             est = chars / CHARS_PER_TOKEN
             tokens[name].append(est)
-            cost[name] += step_cost(price, est, turns - 1) or 0.0
+            carried[name] += carried_tokens(est, turns - 1)
 
     uses = dict(con.execute("""
         SELECT skill_name, count(*) FROM raw_events
@@ -99,9 +89,9 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
           AND (type = 'skill_used' OR (type = 'tool_use' AND tool_name = 'Skill'))
         GROUP BY skill_name""", [cutoff]).fetchall())
 
-    stats = [SkillStat(name, plugin_of(name), sum(t) / len(t), len(t), uses.get(name, 0), cost[name])
+    stats = [SkillStat(name, plugin_of(name), sum(t) / len(t), len(t), uses.get(name, 0), carried[name])
              for name, t in tokens.items()]
-    stats.sort(key=lambda s: (-s.cost, s.name))
+    stats.sort(key=lambda s: (-s.carried, s.name))
     last = con.execute("SELECT max(ts) FROM raw_events WHERE ts >= ?", [cutoff]).fetchone()[0]
     mcp_uses = dict(con.execute("""
         SELECT tool_name, count(*) FROM raw_events
@@ -113,47 +103,45 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
         groups[mcp_group(tool)].append((tool, mcp_uses.get(tool, 0)))
     mcp = sorted((McpStat(g, len(ts), sum(1 for _, n in ts if n), sum(n for _, n in ts)) for g, ts in groups.items()),
                  key=lambda m: (-m.uses, m.group))
-    return SkillReport(stats, sessions, sorted(unpriced), days,
+    return SkillReport(stats, sessions, days,
                        min(starts)[:10] if starts else None, last[:10] if last else None, mcp)
 
 
-def _line(label: str, tokens: float, uses: int, cost: float, extra: str = "") -> str:
+def _line(label: str, tokens: float, uses: int, carried: float, extra: str = "") -> str:
     flag = "  unused" if uses == 0 else ""
-    return f"  {label}   {extra}~{tokens:,.0f} tokens/session  {uses} uses  ${cost:,.2f}{flag}"
+    return f"  {label}   {extra}~{tokens:,.0f} tokens/session  {uses} uses  ~{fmt(carried)} tokens carried{flag}"
 
 
 def render_skills(report: SkillReport) -> str:
     if not report.skills:
         return f"No skill listings found in the last {report.days} days." + _render_mcp(report)
     total_tokens = sum(s.tokens_per_session for s in report.skills)
-    total_cost = sum(s.cost for s in report.skills)
+    total_carried = sum(s.carried for s in report.skills)
     plugins: dict[str, list[SkillStat]] = defaultdict(list)
     for s in report.skills:
         plugins[s.plugin].append(s)
-    rollup = sorted(((p, ss, sum(x.cost for x in ss)) for p, ss in plugins.items()), key=lambda t: (-t[2], t[0]))
+    rollup = sorted(((p, ss, sum(x.carried for x in ss)) for p, ss in plugins.items()), key=lambda t: (-t[2], t[0]))
     lines = [f"Skills loaded in {report.sessions} sessions (last {report.days} days)",
-             f"Estimated cost of carrying skill descriptions: ${total_cost:,.2f} (~{total_tokens:,.0f} tokens/session). "
+             f"Skill descriptions: ~{total_tokens:,.0f} tokens/session, ~{fmt(total_carried)} tokens carried over these sessions. "
              "Token counts are estimates."]
     if report.data_from and report.data_to:
         span = (date.fromisoformat(report.data_to) - date.fromisoformat(report.data_from)).days + 1
         short = f", less than the {report.days} requested" if span < report.days else ""
         lines.append(f"Data covers {report.data_from} to {report.data_to} ({span} days){short}")
     lines += ["", "By plugin"]
-    for plugin, ss, cost in rollup:
-        lines.append(_line(plugin, sum(x.tokens_per_session for x in ss), sum(x.uses for x in ss), cost,
+    for plugin, ss, carried in rollup:
+        lines.append(_line(plugin, sum(x.tokens_per_session for x in ss), sum(x.uses for x in ss), carried,
                            extra=f"{len(ss)} skills  "))
     lines += ["", "All skills"]
-    lines += [_line(s.name, s.tokens_per_session, s.uses, s.cost) for s in report.skills]
+    lines += [_line(s.name, s.tokens_per_session, s.uses, s.carried) for s in report.skills]
     lines.append(_render_mcp(report))
-    if report.unpriced:
-        lines += ["", "Warning: no price for " + ", ".join(report.unpriced) + " - their cost is excluded."]
     return "\n".join(lines)
 
 
 def _render_mcp(report: SkillReport) -> str:
     if not report.mcp:
         return ""
-    lines = ["", "MCP tools by plugin / server (tool schemas are not in the transcripts, so no cost is estimated)"]
+    lines = ["", "MCP tools by plugin / server (tool schemas are not in the transcripts, so no size is estimated)"]
     for m in report.mcp:
         flag = "  unused" if m.uses == 0 else ""
         lines.append(f"  {m.group}   {m.tools} tools  {m.used_tools} used  {m.uses} calls{flag}")
