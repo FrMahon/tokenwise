@@ -16,7 +16,15 @@ Top leaks
   3. other patterns   $2.21
 
 Model: personal (AUC 0.78)
+
+Skills loaded in 12 sessions (last 30 days)
+...                       (skills by plugin, see below)
+
+MCP tools by plugin / server
+  ...                     (tools listed, used, calls)
 ```
+
+One command shows everything: spend and leaks, the skills you carry by plugin, and the MCP tools by plugin or server.
 
 ## Install
 
@@ -26,11 +34,11 @@ tokenwise report
 ```
 
 By default it reads `~/.claude/projects`; use `--sessions-dir` and `--db` to change locations.
-Commands: `ingest`, `train`, `report`, `skills`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
+Commands: `ingest`, `train`, `report`, `skills`. `report` is the one to run: it includes the skills and MCP sections. `skills` prints only those, and takes `--days N`. `train` and `report` save the trained model next to the database (`model.skops`) and reuse it until the data changes; `--retrain` forces a new one.
 
 ## Which skills cost you tokens
 
-Every installed skill adds its name and description to the prompt of every session, whether you use it or not. `tokenwise skills` lists them all by the estimated cost of carrying that text, with how many times you used each one, and marks the ones with zero uses as `unused`.
+Every installed skill adds its name and description to the prompt of every session, whether you use it or not. `tokenwise report` (or `tokenwise skills` for just this part) lists them all by the estimated cost of carrying that text, with how many times you used each one, and marks the ones with zero uses as `unused`.
 
 ```
 $ tokenwise skills            # last 30 days; use --days N to change
@@ -48,6 +56,8 @@ All skills
 ```
 
 (Synthetic numbers.) Token counts are estimated from the length of each description, and uses include both the Skill tool and `/skill` commands. Only skill names and description lengths are stored, never the text.
+
+The same output ends with the MCP tools grouped by plugin or server (`mcp__plugin_X_…` counts as plugin X, `mcp__claude_ai_Y_…` as `claude.ai: Y`): how many tools each lists, how many you called, and `unused` when none. No dollar cost is shown for them, because the transcripts hold tool names, not their schemas.
 
 ## Use it from Claude Code
 
