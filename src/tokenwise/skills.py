@@ -107,9 +107,14 @@ def skill_report(con, *, days: int = 30, now: datetime | None = None) -> SkillRe
                        min(starts)[:10] if starts else None, last[:10] if last else None, mcp)
 
 
+def _clean(s: str) -> str:
+    """Names come from transcripts: drop control characters and cap the length before printing."""
+    return "".join(c for c in s if c.isprintable())[:120]
+
+
 def _line(label: str, tokens: float, uses: int, carried: float, extra: str = "") -> str:
     flag = "  unused" if uses == 0 else ""
-    return f"  {label}   {extra}~{tokens:,.0f} tokens/session  {uses} uses  ~{fmt(carried)} tokens carried{flag}"
+    return f"  {_clean(label)}   {extra}~{tokens:,.0f} tokens/session  {uses} uses  ~{fmt(carried)} tokens carried{flag}"
 
 
 def render_skills(report: SkillReport) -> str:
@@ -144,5 +149,5 @@ def _render_mcp(report: SkillReport) -> str:
     lines = ["", "MCP tools by plugin / server (tool schemas are not in the transcripts, so no size is estimated)"]
     for m in report.mcp:
         flag = "  unused" if m.uses == 0 else ""
-        lines.append(f"  {m.group}   {m.tools} tools  {m.used_tools} used  {m.uses} calls{flag}")
+        lines.append(f"  {_clean(m.group)}   {m.tools} tools  {m.used_tools} used  {m.uses} calls{flag}")
     return "\n".join(lines)

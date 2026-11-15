@@ -115,6 +115,8 @@ def ingest_dir(sessions_dir: Path, con) -> IngestStats:
     _backfill_skills(root, con, "mcp_backfill", ("mcp_listed",))
     stats = IngestStats()
     for path in sorted(root.rglob("*.jsonl")):
+        if path.is_symlink():
+            continue  # a link could point outside the sessions folder
         key = str(path.resolve())
         size = path.stat().st_size
         found = con.execute("SELECT size, lines_read FROM ingest_files WHERE path = ?", [key]).fetchall()

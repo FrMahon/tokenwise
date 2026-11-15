@@ -1,7 +1,7 @@
 ---
 name: report
 description: Show where Claude Code tokens go, which skills, plugins and MCP tools are loaded but unused, and how much is avoidable, by running the local tokenwise CLI on the user's own sessions. Use when the user asks about token usage, spend, wasted tokens, unused skills or plugins, repeated reads, or how to spend fewer tokens.
-allowed-tools: Bash(tokenwise *)
+allowed-tools: Bash(tokenwise report*), Bash(tokenwise skills*), Bash(tokenwise ingest*), Bash(tokenwise train*), Bash(tokenwise --help)
 ---
 
 # tokenwise report

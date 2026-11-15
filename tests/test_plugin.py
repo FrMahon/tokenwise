@@ -21,5 +21,5 @@ def test_skill_has_frontmatter_and_never_installs_silently():
     assert text.startswith("---\n")
     head = text.split("---")[1]
     assert "name: report" in head and "description:" in head
-    assert "allowed-tools: Bash(tokenwise *)" in head  # pre-approves only the tokenwise CLI, not pipx/uv
+    assert "allowed-tools: Bash(tokenwise report*), Bash(tokenwise skills*), Bash(tokenwise ingest*), Bash(tokenwise train*), Bash(tokenwise --help)" in head  # pre-approves only the tokenwise CLI, not pipx/uv
     assert "do NOT install" in text
