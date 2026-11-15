@@ -72,7 +72,7 @@ def _identity(root: Path, path: Path) -> tuple[str, str]:
 def _backfill_skills(root: Path, con, table: str = "skill_backfill", kinds=("skill_listed", "skill_used")) -> None:
     """Fill in skill data for files ingested before it existed: re-read only the lines already ingested and
     add the skill rows (and the skill name on Skill tool calls), leaving everything else as it is."""
-    queued = [r[0] for r in con.execute(f"SELECT path FROM {table}").fetchall()]
+    queued = [r[0] for r in con.execute(f"SELECT path FROM {table}").fetchall()]  # nosec B608  # table is an internal constant
     for key in queued:
         path = Path(key)
         seen = con.execute("SELECT lines_read FROM ingest_files WHERE path = ?", [key]).fetchall()
@@ -106,7 +106,7 @@ def _backfill_skills(root: Path, con, table: str = "skill_backfill", kinds=("ski
             if names:
                 con.executemany("UPDATE raw_events SET skill_name = ? WHERE session_id = ? AND tool_use_id = ? "
                                 "AND type = 'tool_use'", names)
-        con.execute(f"DELETE FROM {table} WHERE path = ?", [key])
+        con.execute(f"DELETE FROM {table} WHERE path = ?", [key])  # nosec B608  # table is an internal constant
 
 
 def ingest_dir(sessions_dir: Path, con) -> IngestStats:
