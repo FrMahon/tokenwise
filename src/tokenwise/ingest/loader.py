@@ -69,10 +69,10 @@ def _identity(root: Path, path: Path) -> tuple[str, str]:
     return parts[0], "/".join(parts[1:])
 
 
-def _backfill_skills(root: Path, con) -> None:
+def _backfill_skills(root: Path, con, table: str = "skill_backfill", kinds=("skill_listed", "skill_used")) -> None:
     """Fill in skill data for files ingested before it existed: re-read only the lines already ingested and
     add the skill rows (and the skill name on Skill tool calls), leaving everything else as it is."""
-    queued = [r[0] for r in con.execute("SELECT path FROM skill_backfill").fetchall()]
+    queued = [r[0] for r in con.execute(f"SELECT path FROM {table}").fetchall()]
     for key in queued:
         path = Path(key)
         seen = con.execute("SELECT lines_read FROM ingest_files WHERE path = ?", [key]).fetchall()
@@ -96,9 +96,9 @@ def _backfill_skills(root: Path, con) -> None:
                         continue
                     line_no += 1
                     for r in parse_line(line, session_id, project, line_no):
-                        if r["type"] in ("skill_listed", "skill_used"):
+                        if r["type"] in kinds:
                             rows.append(r)
-                        elif r["type"] == "tool_use" and r["skill_name"] and r["tool_use_id"]:
+                        elif "skill_listed" in kinds and r["type"] == "tool_use" and r["skill_name"] and r["tool_use_id"]:
                             names.append((r["skill_name"], session_id, r["tool_use_id"]))
                     if len(rows) >= BATCH:
                         _flush(con, rows)
@@ -106,12 +106,13 @@ def _backfill_skills(root: Path, con) -> None:
             if names:
                 con.executemany("UPDATE raw_events SET skill_name = ? WHERE session_id = ? AND tool_use_id = ? "
                                 "AND type = 'tool_use'", names)
-        con.execute("DELETE FROM skill_backfill WHERE path = ?", [key])
+        con.execute(f"DELETE FROM {table} WHERE path = ?", [key])
 
 
 def ingest_dir(sessions_dir: Path, con) -> IngestStats:
     root = Path(sessions_dir)
     _backfill_skills(root, con)
+    _backfill_skills(root, con, "mcp_backfill", ("mcp_listed",))
     stats = IngestStats()
     for path in sorted(root.rglob("*.jsonl")):
         key = str(path.resolve())

@@ -116,3 +116,13 @@ def test_render_shows_covered_range_and_flags_a_short_one():
     assert "Data covers 2026-01-05 to 2026-01-13 (9 days), less than the 30 requested" in short
     full = render_skills(SkillReport(skills, 3, [], 7, "2026-01-05", "2026-01-13"))
     assert "Data covers 2026-01-05 to 2026-01-13 (9 days)" in full and "less than" not in full
+
+
+def test_mcp_tools_grouped_by_plugin_and_flag_unused(tmp_path):
+    delta = {"type": "attachment", "timestamp": ts(5), "attachment": {"type": "deferred_tools_delta", "addedNames": [
+        "WebSearch", "mcp__plugin_pw_pw__click", "mcp__plugin_pw_pw__snap", "mcp__claude_ai_Docs__read"]}}
+    call = asst_line(ts(5, 2), "a2")
+    call["message"]["content"] = [{"type": "tool_use", "id": "t", "name": "mcp__plugin_pw_pw__click", "input": {}}]
+    rep = report(tmp_path, {"s": [listing_line(ts(5), ENTRIES), delta, asst_line(ts(5, 1), "a1"), call]})
+    got = {m.group: (m.tools, m.used_tools, m.uses) for m in rep.mcp}
+    assert got == {"pw": (2, 1, 1), "claude.ai: Docs": (1, 0, 0)}

@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS raw_events (
 CREATE TABLE IF NOT EXISTS ingest_files (path VARCHAR PRIMARY KEY, size BIGINT, lines_read BIGINT);
 -- files ingested before skill data existed: their skill rows are filled in on the next ingest
 CREATE TABLE IF NOT EXISTS skill_backfill (path VARCHAR PRIMARY KEY);
+-- same, for the MCP tool listings
+CREATE TABLE IF NOT EXISTS mcp_backfill (path VARCHAR PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS schema_flags (name VARCHAR PRIMARY KEY);
 """
 
 
@@ -28,4 +31,7 @@ def connect(path: Path | str) -> duckdb.DuckDBPyConnection:
     if "skill_name" not in cols:
         con.execute("ALTER TABLE raw_events ADD COLUMN skill_name VARCHAR")
         con.execute("INSERT INTO skill_backfill SELECT path FROM ingest_files")
+    if not con.execute("SELECT 1 FROM schema_flags WHERE name = 'mcp_listed'").fetchall():
+        con.execute("INSERT INTO mcp_backfill SELECT path FROM ingest_files")
+        con.execute("INSERT INTO schema_flags VALUES ('mcp_listed')")
     return con

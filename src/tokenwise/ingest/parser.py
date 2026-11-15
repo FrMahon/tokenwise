@@ -97,6 +97,10 @@ def parse_line(line: str, session_id: str, project: str, line_no: int) -> list[d
         text = att.get("content")
         entries = split_listing(text) if isinstance(text, str) else {}
         return [_row(base, type="skill_listed", skill_name=n, result_chars=c) for n, c in entries.items()]
+    if d.get("type") == "attachment" and isinstance(att, dict) and att.get("type") == "deferred_tools_delta":
+        names = att.get("addedNames") if isinstance(att.get("addedNames"), list) else []
+        return [_row(base, type="mcp_listed", tool_name=n, result_chars=len(n))
+                for n in names if isinstance(n, str) and n.startswith("mcp__")]
     msg = d.get("message")
     if not isinstance(msg, dict):
         return []

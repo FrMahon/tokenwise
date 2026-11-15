@@ -1,6 +1,6 @@
 """Cost of carrying skill descriptions in every session, and how often each skill is actually used."""
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from .pricing import CHARS_PER_TOKEN, blended_step_price, price_for, step_cost
@@ -20,6 +20,14 @@ class SkillStat:
 
 
 @dataclass
+class McpStat:
+    group: str  # plugin name, "claude.ai: <connector>", or the MCP server name
+    tools: int  # distinct tools seen (listed to the session or called)
+    used_tools: int
+    uses: int
+
+
+@dataclass
 class SkillReport:
     skills: list[SkillStat]  # cost descending, ties by name
     sessions: int  # sessions in the window that loaded a skill listing
@@ -27,6 +35,17 @@ class SkillReport:
     days: int
     data_from: str | None = None  # first and last day (UTC, YYYY-MM-DD) the data actually covers
     data_to: str | None = None
+    mcp: list[McpStat] = field(default_factory=list)  # uses descending, ties by name
+
+
+def mcp_group(tool: str) -> str:
+    """mcp__plugin_<plugin>_<server>__tool -> plugin; mcp__claude_ai_<X>__tool -> "claude.ai: X"; mcp__<server>__tool -> server."""
+    server = tool.split("__")[1] if tool.count("__") >= 2 else tool
+    if server.startswith("plugin_"):
+        return server[7:].split("_", 1)[0]  # shortcut: plugin names containing "_" are cut at it, fix when one shows up
+    if server.startswith("claude_ai_"):
+        return "claude.ai: " + server[10:].replace("_", " ")
+    return server
 
 
 def plugin_of(name: str) -> str:
@@ -84,8 +103,18 @@ def skill_report(con, prices: dict, *, days: int = 30, now: datetime | None = No
              for name, t in tokens.items()]
     stats.sort(key=lambda s: (-s.cost, s.name))
     last = con.execute("SELECT max(ts) FROM raw_events WHERE ts >= ?", [cutoff]).fetchone()[0]
+    mcp_uses = dict(con.execute("""
+        SELECT tool_name, count(*) FROM raw_events
+        WHERE type = 'tool_use' AND starts_with(tool_name, 'mcp__') AND ts >= ? GROUP BY tool_name""", [cutoff]).fetchall())
+    seen = {r[0] for r in con.execute(
+        "SELECT DISTINCT tool_name FROM raw_events WHERE type = 'mcp_listed' AND ts >= ?", [cutoff]).fetchall()}
+    groups: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for tool in seen | set(mcp_uses):
+        groups[mcp_group(tool)].append((tool, mcp_uses.get(tool, 0)))
+    mcp = sorted((McpStat(g, len(ts), sum(1 for _, n in ts if n), sum(n for _, n in ts)) for g, ts in groups.items()),
+                 key=lambda m: (-m.uses, m.group))
     return SkillReport(stats, sessions, sorted(unpriced), days,
-                       min(starts)[:10] if starts else None, last[:10] if last else None)
+                       min(starts)[:10] if starts else None, last[:10] if last else None, mcp)
 
 
 def _line(label: str, tokens: float, uses: int, cost: float, extra: str = "") -> str:
@@ -95,7 +124,7 @@ def _line(label: str, tokens: float, uses: int, cost: float, extra: str = "") ->
 
 def render_skills(report: SkillReport) -> str:
     if not report.skills:
-        return f"No skill listings found in the last {report.days} days."
+        return f"No skill listings found in the last {report.days} days." + _render_mcp(report)
     total_tokens = sum(s.tokens_per_session for s in report.skills)
     total_cost = sum(s.cost for s in report.skills)
     plugins: dict[str, list[SkillStat]] = defaultdict(list)
@@ -115,6 +144,17 @@ def render_skills(report: SkillReport) -> str:
                            extra=f"{len(ss)} skills  "))
     lines += ["", "All skills"]
     lines += [_line(s.name, s.tokens_per_session, s.uses, s.cost) for s in report.skills]
+    lines.append(_render_mcp(report))
     if report.unpriced:
         lines += ["", "Warning: no price for " + ", ".join(report.unpriced) + " - their cost is excluded."]
+    return "\n".join(lines)
+
+
+def _render_mcp(report: SkillReport) -> str:
+    if not report.mcp:
+        return ""
+    lines = ["", "MCP tools by plugin / server (tool schemas are not in the transcripts, so no cost is estimated)"]
+    for m in report.mcp:
+        flag = "  unused" if m.uses == 0 else ""
+        lines.append(f"  {m.group}   {m.tools} tools  {m.used_tools} used  {m.uses} calls{flag}")
     return "\n".join(lines)
