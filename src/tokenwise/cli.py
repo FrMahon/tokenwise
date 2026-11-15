@@ -74,4 +74,5 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(render(con, result, M.predict_proba(result, df), skipped_lines=stats.skipped_lines,
                  prices=load_effective_prices(args.pricing)))
+    print("\n" + render_skills(skill_report(con, load_effective_prices(args.pricing))))
     return 0
