@@ -1,30 +1,26 @@
 # tokenwise
 
-See where your Claude Code token spend goes, and how much of it you could save. Runs entirely on your machine.
+Find which Claude Code plugins, skills and MCP tools you carry in every session without using them, and where your tokens go. Runs entirely on your machine.
 
 Real output on 40 synthetic sessions (generated with `scripts/make_demo_sessions.py`, so the numbers say nothing about typical usage):
 
 ```
 $ tokenwise report
 Sessions analyzed: 40
-Tokens processed: 412.8M
-Avoidable: 61.3M tokens (15%)
+Tokens processed: 193.9M
+Avoidable: 63.6M tokens (33%)
 
 Top leaks
-  1. bulky_unused     41.2M
-  2. repeat           12.4M
-  3. other patterns   7.7M
+  1. bulky_unused     47.6M
+  2. repeat           10.7M
+  3. other patterns   5.3M
 
 Model: personal (AUC 0.78)
 
-Skills loaded in 12 sessions (last 30 days)
-...                       (skills by plugin, see below)
-
-MCP tools by plugin / server
-  ...                     (tools listed, used, calls)
+No skill listings found in the last 30 days.
 ```
 
-One command shows everything: spend and leaks, the skills you carry by plugin, and the MCP tools by plugin or server.
+The demo sessions have no skill listings, so that last line is all it shows there. On real sessions the same command continues with the skills you carry, by plugin, and the MCP tools by plugin or server (examples below). Tokens are counted, not dollars, so there is no price list to maintain.
 
 ## Install
 
